@@ -13,6 +13,26 @@ var game_won: bool = false
 var ui_scene = preload("res://scenes/ui.tscn")
 var ui
 
+# Audio nodes
+var background_audio_stream_player
+var tile_reveal_sound: AudioStreamPlayer
+var mine_explosion_sound: AudioStreamPlayer
+var game_win_sound: AudioStreamPlayer
+var game_lose_sound: AudioStreamPlayer
+
+# Timer and statistics
+var game_timer: float = 0.0
+var game_paused: bool = false
+var game_started: bool = false
+var game_statistics = {
+	"games_played": 0,
+	"games_won": 0,
+	"best_time": 9999.0,
+	"total_time": 0.0,
+	"current_streak": 0,
+	"best_streak": 0
+}
+
 # Input state
 var pressed_tile_index: int = -1
 var mouse_dragging: bool = false
@@ -28,10 +48,32 @@ var revealed_material: StandardMaterial3D
 var flagged_material: StandardMaterial3D
 var mine_material: StandardMaterial3D
 
+# Performance monitoring
+var performance_stats = {
+	"fps": 0,
+	"frame_time": 0.0,
+	"memory_usage": 0,
+	"draw_calls": 0,
+	"vertices": 0,
+	"generation_time": 0.0,
+	"tile_count": 0
+}
+
 func _ready():
 	setup_materials()
 	ui = ui_scene.instantiate()
 	add_child(ui)
+	
+	# Initialize audio nodes
+	background_audio_stream_player = $Audio/BackgroundMusic
+	tile_reveal_sound = $Audio/TileReveal
+	mine_explosion_sound = $Audio/MineExplosion
+	game_win_sound = $Audio/GameWin
+	game_lose_sound = $Audio/GameLose
+	
+	# Setup procedural audio
+	setup_audio()
+	
 	# Ensure a container for fireworks exists
 	if not has_node("Fireworks"):
 		var fw = Node3D.new()
@@ -46,6 +88,23 @@ func _ready():
 	place_mines()
 	calculate_neighbor_counts()
 	update_mine_counter()
+	load_game_statistics()
+
+func _process(delta):
+	if game_started and not game_over and not game_won and not game_paused:
+		game_timer += delta
+		ui.update_time(format_time(game_timer))
+	elif game_paused:
+		# Keep displaying current time when paused
+		ui.update_time(format_time(game_timer))
+	
+	# Update performance stats every frame
+	update_performance_stats()
+
+func format_time(time_seconds: float) -> String:
+	var minutes = int(time_seconds) / 60
+	var seconds = int(time_seconds) % 60
+	return "%02d:%02d" % [minutes, seconds]
 
 func setup_materials():
 	# Unrevealed tiles - dark gray
@@ -72,7 +131,147 @@ func setup_materials():
 	mine_material.metallic = 0.2
 	mine_material.roughness = 0.4
 
+func setup_audio():
+	# Create procedural sound effects
+	create_tile_reveal_sound()
+	create_mine_explosion_sound()
+	create_game_win_sound()
+	create_game_lose_sound()
+	create_background_music()
+
+func create_tile_reveal_sound():
+	var stream = AudioStreamGenerator.new()
+	stream.mix_rate = 22050
+	stream.buffer_length = 0.1
+	tile_reveal_sound.stream = stream
+
+func create_mine_explosion_sound():
+	var stream = AudioStreamGenerator.new()
+	stream.mix_rate = 22050
+	stream.buffer_length = 0.3
+	mine_explosion_sound.stream = stream
+
+func create_game_win_sound():
+	var stream = AudioStreamGenerator.new()
+	stream.mix_rate = 22050
+	stream.buffer_length = 0.8
+	game_win_sound.stream = stream
+
+func create_game_lose_sound():
+	var stream = AudioStreamGenerator.new()
+	stream.mix_rate = 22050
+	stream.buffer_length = 0.8
+	game_lose_sound.stream = stream
+
+func create_background_music():
+	var stream = AudioStreamGenerator.new()
+	stream.mix_rate = 22050
+	stream.buffer_length = 10.0
+	background_audio_stream_player.stream = stream
+
+func play_tile_reveal_sound():
+	if not tile_reveal_sound.stream:
+		return
+	
+	tile_reveal_sound.play()
+	var playback = tile_reveal_sound.get_stream_playback()
+	var sample_rate = 22050
+	var duration = 0.1
+	var samples = int(sample_rate * duration)
+	
+	for i in range(samples):
+		var t = float(i) / sample_rate
+		var freq = 1000 - (t * 500) # Descending frequency
+		var sample = sin(t * freq * 2 * PI) * (1.0 - t / duration) * 0.3
+		playback.push_frame(Vector2(sample, sample))
+	
+	tile_reveal_sound.play()
+
+func play_mine_explosion_sound():
+	if not mine_explosion_sound.stream:
+		return
+	
+	mine_explosion_sound.play()
+	var playback = mine_explosion_sound.get_stream_playback()
+	var sample_rate = 22050
+	var duration = 0.3
+	var samples = int(sample_rate * duration)
+	
+	for i in range(samples):
+		var t = float(i) / sample_rate
+		var noise = randf() * 2.0 - 1.0
+		var envelope = sin(t * PI / duration) * exp(-t * 2.0)
+		var sample = noise * envelope * 0.4
+		playback.push_frame(Vector2(sample, sample))
+
+func play_game_win_sound():
+	if not game_win_sound.stream:
+		return
+	
+	game_win_sound.play()
+	var playback = game_win_sound.get_stream_playback()
+	var sample_rate = 22050
+	var duration = 0.8
+	var samples = int(sample_rate * duration)
+	
+	var notes = [523.25, 659.25, 783.99, 1046.50] # C, E, G, C
+	
+	for i in range(samples):
+		var t = float(i) / sample_rate
+		var note_index = int(t * 4) % 4
+		var freq = notes[note_index]
+		var envelope = sin(t * PI / duration)
+		var sample = sin(t * freq * 2 * PI) * envelope * 0.2
+		playback.push_frame(Vector2(sample, sample))
+
+func play_game_lose_sound():
+	if not game_lose_sound.stream:
+		return
+	
+	game_lose_sound.play()
+	var playback = game_lose_sound.get_stream_playback()
+	var sample_rate = 22050
+	var duration = 0.8
+	var samples = int(sample_rate * duration)
+	
+	var notes = [392.00, 329.63, 261.63, 196.00] # G, E, C, G
+	
+	for i in range(samples):
+		var t = float(i) / sample_rate
+		var note_index = int(t * 4) % 4
+		var freq = notes[note_index]
+		var envelope = sin(t * PI / duration)
+		var sample = sin(t * freq * 2 * PI) * envelope * 0.15
+		playback.push_frame(Vector2(sample, sample))
+	
+	game_lose_sound.play()
+	# Unrevealed tiles - dark gray
+	unrevealed_material = StandardMaterial3D.new()
+	unrevealed_material.albedo_color = Color(0.3, 0.3, 0.3)
+	unrevealed_material.metallic = 0.1
+	unrevealed_material.roughness = 0.7
+	
+	# Revealed tiles - light blue
+	revealed_material = StandardMaterial3D.new()
+	revealed_material.albedo_color = Color(0.7, 0.8, 1.0)
+	revealed_material.metallic = 0.0
+	revealed_material.roughness = 0.5
+	
+	# Flagged tiles - red
+	flagged_material = StandardMaterial3D.new()
+	flagged_material.albedo_color = Color(1.0, 0.2, 0.2)
+	flagged_material.metallic = 0.0
+	flagged_material.roughness = 0.6
+	
+	# Mine tiles - dark red
+	mine_material = StandardMaterial3D.new()
+	mine_material.albedo_color = Color(0.8, 0.1, 0.1)
+	mine_material.metallic = 0.2
+	mine_material.roughness = 0.4
+
 func generate_globe():
+	var start_time = Time.get_unix_time_from_system()
+	
 	# Clear existing tiles
 	for child in $Globe.get_children():
 		child.free()
@@ -114,6 +313,10 @@ func generate_globe():
 	
 	# Calculate neighbors
 	calculate_neighbors(vertices)
+	
+	# Record generation time
+	var end_time = Time.get_unix_time_from_system()
+	performance_stats.generation_time = end_time - start_time
 
 func get_icosphere_vertices() -> Array:
 	# Start with icosahedron vertices
@@ -196,31 +399,30 @@ func create_tile_at_position(index: int, pos: Vector3):
 	tile_node.collision_mask = 1
 	$Globe.add_child(tile_node)
 	
-	# Position on globe surface
-	tile_node.global_position = tile_data.world_position
+	# Position on globe surface, but offset inward to obstruct interior
+	var inward_offset = pos.normalized() * 1.0 # Move 1 unit inward along normal
+	tile_node.global_position = (tile_data.world_position - inward_offset)
 	
 	# Orient to face outward from globe center
 	tile_node.look_at(tile_node.global_position + pos, Vector3.UP)
 	
-	# Create mesh
+	# Create mesh with rounded top edges
 	var mesh_instance = MeshInstance3D.new()
 	var hex_mesh = CylinderMesh.new()
 	hex_mesh.top_radius = hex_radius
 	hex_mesh.bottom_radius = hex_radius
-	hex_mesh.height = 0.1
-	hex_mesh.radial_segments = 6
+	hex_mesh.height = 3.0 # Increased height to obstruct sphere interior
+	hex_mesh.radial_segments = 6 # Keep hexagonal shape
 	hex_mesh.rings = 1
 	mesh_instance.mesh = hex_mesh
 	mesh_instance.material_override = unrevealed_material
 	# Rotate so the flat hex face points along -Z (to match label placement)
 	mesh_instance.rotate_x(deg_to_rad(90))
-	tile_node.add_child(mesh_instance)
-	
-	# Create collision (hexagonal prism via cylinder shape)
+	tile_node.add_child(mesh_instance) # Create collision (hexagonal prism via cylinder shape)
 	var collision = CollisionShape3D.new()
 	var cyl_shape = CylinderShape3D.new()
-	cyl_shape.radius = hex_mesh.top_radius
-	cyl_shape.height = hex_mesh.height
+	cyl_shape.radius = hex_radius
+	cyl_shape.height = 3.0 # Match total height of compound mesh
 	collision.shape = cyl_shape
 	# Match mesh rotation so the collision aligns with the visual
 	collision.rotate_x(deg_to_rad(90))
@@ -290,6 +492,19 @@ func update_mine_counter():
 func _input(event):
 	if game_over or game_won:
 		return
+	
+	# Handle keyboard input for pause/resume
+	if event is InputEventKey and event.pressed:
+		if event.keycode == KEY_SPACE:
+			if game_started:
+				if game_paused:
+					resume_game()
+				else:
+					pause_game()
+			return # Don't process mouse input when space is pressed
+		elif event.keycode == KEY_F12:
+			print_performance_report()
+			return
 	
 	if event is InputEventMouseButton:
 		var tile = get_tile_under_mouse(event.position)
@@ -361,6 +576,15 @@ func reveal_tile(tile):
 	
 	tile.is_revealed = true
 	
+	# Start timer on first tile reveal
+	if not game_started:
+		game_started = true
+		game_paused = false
+	
+	# Play tile reveal sound
+	if tile_reveal_sound:
+		play_tile_reveal_sound()
+	
 	# Color mapping for neighboring mines (1-8)
 	var color_map = [
 		Color(0.8, 0.8, 0.8), # 0 - unused
@@ -384,6 +608,17 @@ func reveal_tile(tile):
 	if tile.has_mine:
 		# Game over
 		game_over = true
+		game_paused = true # Stop timer
+		update_game_statistics() # Update stats for loss
+		
+		# Play mine explosion sound
+		if mine_explosion_sound:
+			play_mine_explosion_sound()
+		
+		# Play game lose sound
+		if game_lose_sound:
+			play_game_lose_sound()
+		
 		reveal_all_mines()
 		ui.show_game_over("Game Over!")
 		return
@@ -481,6 +716,13 @@ func check_win_condition():
 	
 	# All safe tiles revealed
 	game_won = true
+	game_paused = true # Stop timer
+	update_game_statistics() # Update stats for win
+	
+	# Play game win sound
+	if game_win_sound:
+		play_game_win_sound()
+	
 	ui.show_game_over("You Win!")
 	trigger_fireworks()
 
@@ -495,7 +737,7 @@ func trigger_fireworks():
 	rng.randomize()
 	var bursts := 10
 	for i in range(bursts):
-		var dir = Vector3(rng.randf_range(-1,1), rng.randf_range(-1,1), rng.randf_range(-1,1)).normalized()
+		var dir = Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
 		var pos = dir * (globe_radius * 1.2)
 		create_firework_at(fw_root, pos)
 
@@ -520,14 +762,14 @@ func create_firework_at(parent: Node3D, pos: Vector3):
 	mat.hue_variation_min = -0.2
 	mat.hue_variation_max = 0.2
 	mat.spread = 180.0
-	mat.color = Color(1,1,1)
+	mat.color = Color(1, 1, 1)
 	# Color ramp for nice fade
 	var grad = Gradient.new()
-	grad.colors = PackedColorArray([Color(1,1,1), Color(1,0,0), Color(1,1,0), Color(0,1,1), Color(0,0,0,0)])
+	grad.colors = PackedColorArray([Color(1, 1, 1), Color(1, 0, 0), Color(1, 1, 0), Color(0, 1, 1), Color(0, 0, 0, 0)])
 	grad.offsets = PackedFloat32Array([0.0, 0.2, 0.5, 0.8, 1.0])
 	mat.color_ramp = grad
 	# Slight upward burst
-	mat.direction = Vector3(0,1,0)
+	mat.direction = Vector3(0, 1, 0)
 	mat.spread = 360.0
 	p.process_material = mat
 	parent.add_child(p)
@@ -562,7 +804,76 @@ func reset_game():
 		ui.hide_game_over()
 	# Clear any fireworks effects
 	clear_fireworks()
+	# Reset timer
+	reset_timer()
 	generate_globe()
 	place_mines()
 	calculate_neighbor_counts()
 	update_mine_counter()
+
+# Statistics and timer functions
+func load_game_statistics():
+	var save_path = "user://game_statistics.save"
+	if FileAccess.file_exists(save_path):
+		var file = FileAccess.open(save_path, FileAccess.READ)
+		game_statistics = file.get_var()
+		file.close()
+
+func save_game_statistics():
+	var save_path = "user://game_statistics.save"
+	var file = FileAccess.open(save_path, FileAccess.WRITE)
+	file.store_var(game_statistics)
+	file.close()
+
+func update_game_statistics():
+	game_statistics.games_played += 1
+	
+	if game_won:
+		game_statistics.games_won += 1
+		game_statistics.current_streak += 1
+		if game_statistics.current_streak > game_statistics.best_streak:
+			game_statistics.best_streak = game_statistics.current_streak
+		
+		if game_timer < game_statistics.best_time:
+			game_statistics.best_time = game_timer
+	else:
+		game_statistics.current_streak = 0
+	
+	game_statistics.total_time += game_timer
+	save_game_statistics()
+
+func pause_game():
+	game_paused = true
+
+func resume_game():
+	game_paused = false
+
+func reset_timer():
+	game_timer = 0.0
+	game_started = false
+	game_paused = false
+	ui.update_time("00:00")
+
+# Performance monitoring functions
+func update_performance_stats():
+	performance_stats.fps = Performance.get_monitor(Performance.TIME_FPS)
+	performance_stats.frame_time = Performance.get_monitor(Performance.TIME_PROCESS)
+	performance_stats.memory_usage = Performance.get_monitor(Performance.MEMORY_STATIC)
+	performance_stats.draw_calls = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+	performance_stats.vertices = 0 # Placeholder - vertices monitoring not available in this Godot version
+	performance_stats.tile_count = tiles.size()
+
+func get_performance_report() -> String:
+	update_performance_stats()
+	var report = "=== Performance Report ===\n"
+	report += "FPS: %d\n" % performance_stats.fps
+	report += "Frame Time: %.2f ms\n" % (performance_stats.frame_time * 1000)
+	report += "Memory Usage: %.2f MB\n" % (performance_stats.memory_usage / 1024 / 1024)
+	report += "Draw Calls: %d\n" % performance_stats.draw_calls
+	report += "Vertices: %d\n" % performance_stats.vertices
+	report += "Tiles: %d\n" % performance_stats.tile_count
+	report += "Generation Time: %.2f ms\n" % (performance_stats.generation_time * 1000)
+	return report
+
+func print_performance_report():
+	print(get_performance_report())

@@ -12,3 +12,20 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 30)
 transform = Transform3D(0.707107, -0.5, 0.5, 0, 0.707107, 0.707107, -0.707107, -0.5, 0.5, 0, 0, 0)
 
 [node name="Globe" type="Node3D" parent="."]
+
+[node name="Audio" type="Node" parent="."]
+
+[node name="BackgroundMusic" type="AudioStreamPlayer" parent="Audio"]
+volume_db = -10.0
+autoplay = true
+
+[node name="TileReveal" type="AudioStreamPlayer" parent="Audio"]
+volume_db = -5.0
+
+[node name="MineExplosion" type="AudioStreamPlayer" parent="Audio"]
+
+[node name="GameWin" type="AudioStreamPlayer" parent="Audio"]
+volume_db = -5.0
+
+[node name="GameLose" type="AudioStreamPlayer" parent="Audio"]
+volume_db = -5.0

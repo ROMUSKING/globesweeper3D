@@ -4,7 +4,7 @@
 		{
 			"label": "Run Godot Project",
 			"type": "shell",
-			"command": "godot",
+			"command": "C:\\Users\\ROMAN\\Downloads\\Godot_v4.4.1-stable_win64.exe\\Godot_v4.4.1-stable_win64_console.exe",
 			"args": [
 				"--path",
 				".",

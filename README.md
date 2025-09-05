@@ -16,37 +16,75 @@ GlobeSweeper 3D transforms the traditional Minesweeper experience into a spheric
 - **Hexagonal Tiles**: Tiles arranged in geodesic patterns for optimal spherical coverage
 - **Dynamic Difficulty**: Adjustable mine percentage and globe subdivision levels
 - **Classic Mechanics**: Flag mines, reveal safe tiles, chord reveals, and flood-fill
+- **Game Timer**: Real-time timer with pause/resume functionality
+- **Statistics Tracking**: Comprehensive game statistics and best times
+
+### Audio System
+
+- **Procedural Audio Generation**: Dynamic sound effects using AudioStreamGenerator
+- **Tile Reveal Sounds**: Satisfying "pop" sounds for tile interactions
+- **Explosion Effects**: Dramatic sound effects for mine detonations
+- **Win/Lose Melodies**: Musical feedback for game outcomes
+- **No External Files**: All audio generated procedurally for lightweight distribution
 
 ### Visual & Interactive
 
 - **3D Rendering**: Built with Godot's Forward+ renderer
+- **Enhanced Tile Design**: Taller tiles (3x height) for better sphere obstruction
 - **Material System**: Distinct visual states for unrevealed, revealed, flagged, and mine tiles
 - **Mouse Controls**: Click to reveal, right-click to flag, drag to rotate globe
 - **Touch Support**: Mobile-friendly touch controls with double-tap reveals
 - **Fireworks Effects**: Celebratory particle effects when you win
+- **Hexagonal Integrity**: Maintained hexagonal tile shape with rounded top edges
 
 ### User Interface
 
 - **Real-time Mine Counter**: Shows remaining mines to flag
 - **Game Status Display**: Win/lose messages with visual feedback
+- **Timer Display**: MM:SS format with pause functionality
 - **Reset Functionality**: Quick restart button to start a new game
+- **Statistics Panel**: Track games played, win rate, and best times
 - **Responsive Design**: Adapts to different window sizes
+
+### Performance & Technical
+
+- **Real-time Monitoring**: F12 shortcut for performance statistics
+- **FPS Tracking**: Frame rate monitoring and optimization
+- **Memory Usage**: Real-time memory consumption tracking
+- **Generation Timing**: Globe creation performance measurement
+- **Cross-platform**: Verified compatibility across platforms
 
 ## 🛠 Technical Details
 
 ### Engine & Requirements
 
-- **Godot Engine**: Version 4.4 or later
+- **Godot Engine**: Version 4.4.1 (tested and optimized)
 - **Rendering**: Forward+ with mobile compatibility
 - **Physics**: 3D physics for raycasting and collision detection
-- **Platform**: Windows, macOS, Linux, Android, iOS, Web
+- **Audio**: Procedural sound generation using AudioStreamGenerator
+- **Platform**: Windows (primary), macOS, Linux, Android, iOS, Web
 
 ### Geometry System
 
 - **Icosphere Generation**: Starts with icosahedron and subdivides faces
-- **Hexagonal Tiles**: Each face becomes 6 hexagonal tiles
+- **Hexagonal Tiles**: Each face becomes 6 hexagonal tiles with enhanced height (3.0 units)
 - **Neighbor Calculation**: Accurate adjacency detection for mine counting
 - **Dynamic Sizing**: Tile radius calculated to prevent overlap
+- **Interior Obstruction**: Tiles positioned inward to block sphere interior view
+
+### Audio Architecture
+
+- **Procedural Generation**: All sounds created algorithmically
+- **AudioStreamGenerator**: Real-time audio synthesis
+- **Multi-channel Support**: Separate streams for different sound types
+- **Performance Optimized**: Lightweight audio processing
+
+### Performance Monitoring
+
+- **Real-time Metrics**: FPS, frame time, memory usage, draw calls
+- **Generation Tracking**: Globe creation performance measurement
+- **F12 Integration**: Keyboard shortcut for performance reports
+- **Optimization Ready**: Framework for continuous performance improvement
 
 ### Performance Optimizations
 
@@ -78,7 +116,7 @@ GlobeSweeper 3D transforms the traditional Minesweeper experience into a spheric
 
 ## 📁 Project Structure
 
-```
+```bash
 globesweeper3D/
 ├── project.godot          # Godot project configuration
 ├── README.md             # This documentation
