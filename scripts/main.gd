@@ -14,7 +14,7 @@ var ui_scene = preload("res://scenes/ui.tscn")
 var ui
 
 # Audio nodes
-var background_audio_stream_player
+var background_audio_stream_player: AudioStreamPlayer
 var tile_reveal_sound: AudioStreamPlayer
 var mine_explosion_sound: AudioStreamPlayer
 var game_win_sound: AudioStreamPlayer
@@ -406,17 +406,50 @@ func create_tile_at_position(index: int, pos: Vector3):
 	# Orient to face outward from globe center
 	tile_node.look_at(tile_node.global_position + pos, Vector3.UP)
 	
-	# Create mesh with rounded top edges
+	# Create mesh with flat top and rounded edges using CSG
 	var mesh_instance = MeshInstance3D.new()
-	var hex_mesh = CylinderMesh.new()
-	hex_mesh.top_radius = hex_radius
-	hex_mesh.bottom_radius = hex_radius
-	hex_mesh.height = 3.0 # Increased height to obstruct sphere interior
-	hex_mesh.radial_segments = 6 # Keep hexagonal shape
-	hex_mesh.rings = 1
-	mesh_instance.mesh = hex_mesh
+
+	# Create temporary CSG scene for mesh generation
+	var temp_csg = CSGCombiner3D.new()
+
+	# Main hexagonal cylinder body
+	var csg_cylinder = CSGCylinder3D.new()
+	csg_cylinder.radius = hex_radius
+	csg_cylinder.height = 2.6 # Leave space for rounded edges
+	csg_cylinder.sides = 6 # Hexagonal shape
+	temp_csg.add_child(csg_cylinder)
+
+	# Add small spheres at corners for rounded edges
+	for i in range(6):
+		var angle = (i * PI * 2) / 6
+		var sphere = CSGSphere3D.new()
+		sphere.radius = hex_radius * 0.15 # Small radius for edge rounding
+		sphere.position = Vector3(
+			cos(angle) * hex_radius,
+			1.3, # Position at top of cylinder
+			sin(angle) * hex_radius
+		)
+		temp_csg.add_child(sphere)
+
+	# Bake the CSG mesh
+	var meshes = temp_csg.get_meshes()
+	var baked_mesh: Mesh = null
+	if meshes.size() > 1:
+		baked_mesh = meshes[1] as Mesh
+	else:
+		# Fallback: create a simple cylinder mesh
+		var cylinder_mesh = CylinderMesh.new()
+		cylinder_mesh.top_radius = hex_radius
+		cylinder_mesh.bottom_radius = hex_radius
+		cylinder_mesh.height = 3.0
+		cylinder_mesh.radial_segments = 6
+		cylinder_mesh.rings = 2
+		baked_mesh = cylinder_mesh
+
+	mesh_instance.mesh = baked_mesh
 	mesh_instance.material_override = unrevealed_material
-	# Rotate so the flat hex face points along -Z (to match label placement)
+
+	# Rotate so the flat top faces outward
 	mesh_instance.rotate_x(deg_to_rad(90))
 	tile_node.add_child(mesh_instance) # Create collision (hexagonal prism via cylinder shape)
 	var collision = CollisionShape3D.new()
