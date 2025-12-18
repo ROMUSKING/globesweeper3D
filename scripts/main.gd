@@ -10,6 +10,7 @@ var tiles: Array = []
 const GlobeGeneratorScript = preload("res://scripts/globe_generator.gd")
 const AudioManagerScript = preload("res://scripts/audio_manager.gd")
 const InteractionManagerScript = preload("res://scripts/interaction_manager.gd")
+const CURSOR_SCENE = preload("res://scenes/cursor.tscn")
 var globe_generator
 var audio_manager
 var game_over: bool = false
@@ -33,6 +34,8 @@ var game_statistics = {
 
 # Input state
 var interaction_manager
+var cursor: Node3D
+var hovered_tile_index: int = -1
 
 # Camera and Game Feel State
 var rotation_velocity: Vector2 = Vector2.ZERO
@@ -95,6 +98,11 @@ func _ready():
 	interaction_manager.drag_active.connect(_on_globe_dragged)
 	interaction_manager.zoom_changed.connect(_on_zoom_changed)
 	
+	# Initialize cursor
+	cursor = CURSOR_SCENE.instantiate()
+	add_child(cursor)
+	cursor.visible = false
+	
 	# Ensure a container for fireworks exists
 	if not has_node("Fireworks"):
 		var fw = Node3D.new()
@@ -119,6 +127,14 @@ func _process(delta):
 	elif game_paused:
 		# Keep displaying current time when paused
 		ui.update_time(format_time(game_timer))
+	
+	# Update cursor position to follow rotating tile
+	if hovered_tile_index != -1 and hovered_tile_index < tiles.size():
+		var tile = tiles[hovered_tile_index]
+		if is_instance_valid(tile.node):
+			cursor.global_position = tile.node.global_position
+			cursor.global_basis = tile.node.global_basis
+			cursor.translate_object_local(Vector3(0, 0.01, 0))
 	
 	_process_camera_feel(delta)
 	
@@ -151,7 +167,7 @@ func _process_camera_feel(delta):
 		$Camera3D.v_offset = 0
 
 func format_time(time_seconds: float) -> String:
-	var minutes = int(time_seconds) / 60
+	var minutes = int(time_seconds / 60.0)
 	var seconds = int(time_seconds) % 60
 	return "%02d:%02d" % [minutes, seconds]
 
@@ -234,9 +250,12 @@ func _input(event):
 			print_performance_report()
 
 func _on_tile_hovered(index: int):
-	# Debug print to verify interaction system
-	# print("Main Hovered: ", index)
-	pass
+	hovered_tile_index = index
+	if index != -1 and index < tiles.size():
+		cursor.visible = true
+		# Position update will happen in _process
+	else:
+		cursor.visible = false
 
 func _on_tile_clicked(index: int, button_index: int):
 	if game_over or game_won or game_paused:

@@ -8,6 +8,9 @@ signal game_reset_requested
 @onready var game_over_label = $GameOverLabel
 
 func _ready():
+	# Ensure UI root doesn't block mouse input for the game
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
 	reset_button.pressed.connect(_on_reset_button_pressed)
 	game_over_label.visible = false
 

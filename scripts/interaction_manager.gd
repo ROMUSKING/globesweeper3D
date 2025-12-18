@@ -10,21 +10,15 @@ signal zoom_changed(amount: float)
 
 # Configuration
 const DRAG_THRESHOLD: float = 4.0
-const CURSOR_SCENE = preload("res://scenes/cursor.tscn")
 
 # State
 var _pressed_tile_index: int = -1
 var _is_dragging: bool = false
 var _mouse_down_pos: Vector2 = Vector2.ZERO
 var _current_hovered_index: int = -1
-var _cursor: Node3D
 
 func _ready():
 	process_mode = Node.PROCESS_MODE_PAUSABLE
-	
-	_cursor = CURSOR_SCENE.instantiate()
-	add_child(_cursor)
-	_cursor.visible = false
 
 func _physics_process(_delta):
 	_update_hover()
@@ -44,14 +38,6 @@ func _update_hover():
 	if hit_index != _current_hovered_index:
 		_current_hovered_index = hit_index
 		tile_hovered.emit(hit_index)
-	
-	# Update cursor
-	if hit_collider:
-		_cursor.visible = true
-		_cursor.global_position = hit_collider.global_position
-		_cursor.basis = hit_collider.basis
-	else:
-		_cursor.visible = false
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
