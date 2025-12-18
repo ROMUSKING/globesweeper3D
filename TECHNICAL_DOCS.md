@@ -246,3 +246,39 @@ Avoid instant state changes. Use `Tween` for "Game Feel".
   3. **Stretch:** Scale Y up to 1.1 over 0.1s.
   4. **Settle:** Scale Y back to 1.0 over 0.05s.
 - **Audio Sync:** Trigger "pop" sound at the start of the sequence.
+
+# Phase 6: Game Loop & UI Architecture
+
+## Game State Machine
+
+Moving from a prototype to a structured game requires a formal State Machine in `Main.gd`.
+
+### States
+
+1. **MENU**: The entry point. Displays the Main Menu. Input on the globe is disabled or limited to cosmetic rotation.
+2. **PLAYING**: The active game loop. Input enabled, timer running.
+3. **PAUSED**: Gameplay suspended. Input disabled, timer paused.
+4. **GAME_OVER**: Win or Loss state. Statistics displayed, input disabled.
+
+### Flow
+
+- **Start**: `MENU` -> `PLAYING`
+- **Pause**: `PLAYING` <-> `PAUSED`
+- **End**: `PLAYING` -> `GAME_OVER`
+- **Restart**: `GAME_OVER` -> `PLAYING` (or `MENU`)
+
+## UI Architecture
+
+The UI will be refactored into modular components managed by a central `UIManager`.
+
+### Components
+
+- **MainMenu (`scenes/ui/MainMenu.tscn`)**: Title, Start Button, Settings access.
+- **HUD (`scenes/ui/HUD.tscn`)**: Persistent overlay during gameplay (Timer, Mine Count, Menu Button).
+- **GameOver (`scenes/ui/GameOver.tscn`)**: Modal overlay for Win/Loss state with Restart options.
+
+### Signal Architecture
+
+- **UI Components** emit signals (e.g., `start_clicked`, `restart_clicked`) to the **UIManager**.
+- **UIManager** exposes high-level signals (`start_game`, `quit_game`) to **Main**.
+- **Main** calls methods on **UIManager** to update state (`update_hud`, `show_game_over`).

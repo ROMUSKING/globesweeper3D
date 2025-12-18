@@ -13,14 +13,13 @@ const InteractionManagerScript = preload("res://scripts/interaction_manager.gd")
 const CURSOR_SCENE = preload("res://scenes/cursor.tscn")
 var globe_generator
 var audio_manager
-var game_over: bool = false
-var game_won: bool = false
+enum GameState {MENU, PLAYING, GAME_OVER}
+var current_state: GameState = GameState.MENU
 var ui_scene = preload("res://scenes/ui.tscn")
 var ui
 
 # Timer and statistics
 var game_timer: float = 0.0
-var game_paused: bool = false
 var game_started: bool = false
 var mines_placed: bool = false
 var game_statistics = {
@@ -81,7 +80,9 @@ var performance_stats = {
 func _ready():
 	setup_materials()
 	ui = ui_scene.instantiate()
-	ui.game_reset_requested.connect(reset_game)
+	ui.start_game_requested.connect(_on_start_game_requested)
+	ui.restart_game_requested.connect(reset_game)
+	ui.menu_requested.connect(_on_menu_requested)
 	add_child(ui)
 	
 	globe_generator = GlobeGeneratorScript.new()
@@ -118,18 +119,14 @@ func _ready():
 	$Camera3D.position = Vector3(0, 0, current_zoom)
 	
 	# Start game
-	generate_globe()
-	mines_placed = false
-	update_mine_counter()
 	load_game_statistics()
 
 func _process(delta):
-	if game_started and not game_over and not game_won and not game_paused:
-		game_timer += delta
-		ui.update_time(format_time(game_timer))
-	elif game_paused:
-		# Keep displaying current time when paused
-		ui.update_time(format_time(game_timer))
+	if current_state == GameState.PLAYING:
+		if game_started:
+			game_timer += delta
+			ui.update_time(format_time(game_timer))
+		update_mine_counter()
 	
 	# Update cursor position to follow rotating tile
 	if hovered_tile_index != -1 and hovered_tile_index < tiles.size():
@@ -145,6 +142,10 @@ func _process(delta):
 	update_performance_stats()
 
 func _process_camera_feel(delta):
+	# Auto-rotate in menu
+	if current_state == GameState.MENU:
+		$Globe.rotate_y(0.1 * delta)
+		
 	# Apply rotation momentum only when not dragging
 	if not is_dragging_globe and rotation_velocity.length_squared() > 0.000001:
 		# Scale rotation by delta to maintain consistent speed across framerates
@@ -243,18 +244,9 @@ func update_mine_counter():
 	ui.update_mines(total_mines - flagged_count)
 
 func _input(event):
-	if game_over or game_won:
-		return
-	
-	# Handle keyboard input for pause/resume
+	# Handle debug keys
 	if event is InputEventKey and event.pressed:
-		if event.keycode == KEY_SPACE:
-			if game_started:
-				if game_paused:
-					resume_game()
-				else:
-					pause_game()
-		elif event.keycode == KEY_F12:
+		if event.keycode == KEY_F12:
 			print_performance_report()
 
 func _on_tile_hovered(index: int):
@@ -266,7 +258,7 @@ func _on_tile_hovered(index: int):
 		cursor.visible = false
 
 func _on_tile_clicked(index: int, button_index: int):
-	if game_over or game_won or game_paused:
+	if current_state != GameState.PLAYING:
 		return
 		
 	var tile = tiles[index]
@@ -310,7 +302,6 @@ func reveal_tile(tile):
 	# Start timer on first tile reveal
 	if not game_started:
 		game_started = true
-		game_paused = false
 	
 	# Play tile reveal sound
 	audio_manager.play_reveal_sound()
@@ -326,9 +317,7 @@ func reveal_tile(tile):
 	
 	if tile.has_mine:
 		# Game over
-		game_over = true
-		game_paused = true # Stop timer
-		update_game_statistics() # Update stats for loss
+		update_game_statistics(false) # Update stats for loss
 		
 		# Trigger screen shake
 		shake_strength = 2.5
@@ -340,7 +329,7 @@ func reveal_tile(tile):
 		audio_manager.play_lose_sound()
 		
 		reveal_all_mines()
-		ui.show_game_over("Game Over!")
+		change_state(GameState.GAME_OVER)
 		return
 	
 	# Show number if has neighboring mines
@@ -445,14 +434,12 @@ func check_win_condition():
 			return # Still have unrevealed safe tiles
 	
 	# All safe tiles revealed
-	game_won = true
-	game_paused = true # Stop timer
-	update_game_statistics() # Update stats for win
+	update_game_statistics(true) # Update stats for win
 	
 	# Play game win sound
 	audio_manager.play_win_sound()
 	
-	ui.show_game_over("You Win!")
+	change_state(GameState.GAME_OVER)
 	trigger_fireworks()
 
 func trigger_fireworks():
@@ -521,23 +508,55 @@ func clear_fireworks():
 			c.queue_free()
 
 func reset_game():
-	game_over = false
-	game_won = false
 	# Reset globe orientation and camera position to defaults for consistency after reset
 	$Globe.rotation = Vector3.ZERO
 	rotation_velocity = Vector2.ZERO
 	target_zoom = globe_radius * 3
 	current_zoom = target_zoom
 	$Camera3D.position = Vector3(0, 0, current_zoom)
-	# Reset input state
-	if ui and ui.has_method("hide_game_over"):
-		ui.hide_game_over()
+	
 	# Clear any fireworks effects
 	clear_fireworks()
+	
 	# Reset timer
 	reset_timer()
 	generate_globe()
 	mines_placed = false
+	update_mine_counter()
+	change_state(GameState.PLAYING)
+
+func change_state(new_state: GameState):
+	current_state = new_state
+	match current_state:
+		GameState.MENU:
+			ui.show_main_menu()
+			interaction_manager.set_process_input(false)
+			cursor.visible = false
+		GameState.PLAYING:
+			ui.show_hud()
+			interaction_manager.set_process_input(true)
+		GameState.GAME_OVER:
+			var is_win = false
+			# Determine if win or loss based on remaining unrevealed safe tiles
+			var unrevealed_safe = 0
+			for t in tiles:
+				if not t.has_mine and not t.is_revealed:
+					unrevealed_safe += 1
+			is_win = (unrevealed_safe == 0)
+			
+			ui.show_game_over(is_win)
+			interaction_manager.set_process_input(false)
+			cursor.visible = false
+
+func _on_start_game_requested():
+	reset_game()
+
+func _on_menu_requested():
+	# Clear globe or just stop processing
+	for child in $Globe.get_children():
+		child.queue_free()
+	tiles.clear()
+	change_state(GameState.MENU)
 	update_mine_counter()
 
 # Statistics and timer functions
@@ -554,10 +573,10 @@ func save_game_statistics():
 	file.store_var(game_statistics)
 	file.close()
 
-func update_game_statistics():
+func update_game_statistics(is_win: bool):
 	game_statistics.games_played += 1
 	
-	if game_won:
+	if is_win:
 		game_statistics.games_won += 1
 		game_statistics.current_streak += 1
 		if game_statistics.current_streak > game_statistics.best_streak:
@@ -571,16 +590,9 @@ func update_game_statistics():
 	game_statistics.total_time += game_timer
 	save_game_statistics()
 
-func pause_game():
-	game_paused = true
-
-func resume_game():
-	game_paused = false
-
 func reset_timer():
 	game_timer = 0.0
 	game_started = false
-	game_paused = false
 	ui.update_time("00:00")
 
 # Performance monitoring functions
