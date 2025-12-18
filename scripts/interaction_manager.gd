@@ -58,31 +58,33 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 			zoom_changed.emit(1.0)
 			return
 		
-		# Mouse Down
 		var tile_index = _get_tile_index_at(event.position)
-		_pressed_tile_index = tile_index
-		_mouse_down_pos = event.position
-		_is_dragging = false
 		
+		# Mouse Down - Only start drag tracking on Left Click
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			_pressed_tile_index = tile_index
+			_mouse_down_pos = event.position
+			_is_dragging = false
+		
+		# Right click is instant/independent
 		if event.button_index == MOUSE_BUTTON_RIGHT and tile_index != -1:
 			tile_clicked.emit(tile_index, MOUSE_BUTTON_RIGHT)
 			
 	else:
-		# Mouse Up
-		if not _is_dragging:
-			var tile_index = _get_tile_index_at(event.position)
-			# If we released on the same tile we pressed, it's a click
-			if tile_index != -1 and tile_index == _pressed_tile_index:
-				# Left click action
-				if event.button_index == MOUSE_BUTTON_LEFT:
+		# Mouse Up - Only handle Left Click release for drag/click logic
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if not _is_dragging:
+				var tile_index = _get_tile_index_at(event.position)
+				# If we released on the same tile we pressed, it's a click
+				if tile_index != -1 and tile_index == _pressed_tile_index:
 					tile_clicked.emit(tile_index, MOUSE_BUTTON_LEFT)
-		
-		if _is_dragging:
-			_is_dragging = false
-			drag_ended.emit()
-		
-		_pressed_tile_index = -1
-		_mouse_down_pos = Vector2.ZERO
+			
+			if _is_dragging:
+				_is_dragging = false
+				drag_ended.emit()
+			
+			_pressed_tile_index = -1
+			_mouse_down_pos = Vector2.ZERO
 
 func _handle_mouse_motion(event: InputEventMouseMotion) -> void:
 	# Hover is now handled in _physics_process

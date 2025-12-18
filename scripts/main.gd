@@ -39,8 +39,9 @@ var hovered_tile_index: int = -1
 
 # Camera and Game Feel State
 var rotation_velocity: Vector2 = Vector2.ZERO
-const ROTATION_FRICTION: float = 0.95
+const ROTATION_FRICTION: float = 2.5 # Adjusted for time-based lerp
 const ROTATION_SENSITIVITY: float = 0.003
+var is_dragging_globe: bool = false
 var target_zoom: float = 60.0
 var current_zoom: float = 60.0
 const ZOOM_SPEED: float = 5.0
@@ -95,6 +96,8 @@ func _ready():
 	add_child(interaction_manager)
 	interaction_manager.tile_hovered.connect(_on_tile_hovered)
 	interaction_manager.tile_clicked.connect(_on_tile_clicked)
+	interaction_manager.drag_started.connect(func(): is_dragging_globe = true)
+	interaction_manager.drag_ended.connect(func(): is_dragging_globe = false)
 	interaction_manager.drag_active.connect(_on_globe_dragged)
 	interaction_manager.zoom_changed.connect(_on_zoom_changed)
 	
@@ -142,11 +145,16 @@ func _process(delta):
 	update_performance_stats()
 
 func _process_camera_feel(delta):
-	# Apply rotation momentum
-	if rotation_velocity.length_squared() > 0.000001:
-		$Globe.rotate_y(rotation_velocity.x)
-		$Globe.rotate_x(rotation_velocity.y)
-		rotation_velocity *= ROTATION_FRICTION
+	# Apply rotation momentum only when not dragging
+	if not is_dragging_globe and rotation_velocity.length_squared() > 0.000001:
+		# Scale rotation by delta to maintain consistent speed across framerates
+		# Assuming velocity is captured as "movement per tick", we normalize with 60FPS reference
+		var frame_adjust = delta * 60.0
+		$Globe.rotate_y(rotation_velocity.x * frame_adjust)
+		$Globe.rotate_x(rotation_velocity.y * frame_adjust)
+		
+		# Time-step independent friction
+		rotation_velocity = rotation_velocity.lerp(Vector2.ZERO, delta * ROTATION_FRICTION)
 		
 		# Stop if very slow
 		if rotation_velocity.length() < 0.0001:
@@ -273,10 +281,14 @@ func _on_tile_clicked(index: int, button_index: int):
 		toggle_flag(tile)
 
 func _on_globe_dragged(relative: Vector2):
-	# Add momentum to rotation
+	# Direct manipulation
 	# Inverted controls: drag right -> globe rotates right
-	rotation_velocity.x += relative.x * ROTATION_SENSITIVITY
-	rotation_velocity.y += relative.y * ROTATION_SENSITIVITY
+	var drag_rot = relative * ROTATION_SENSITIVITY
+	$Globe.rotate_y(drag_rot.x)
+	$Globe.rotate_x(drag_rot.y)
+	
+	# Store velocity for momentum on release
+	rotation_velocity = drag_rot
 
 func _on_zoom_changed(amount: float):
 	target_zoom += amount * 5.0
