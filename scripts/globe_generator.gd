@@ -5,20 +5,25 @@ var icosphere_faces: Array = []
 var globe_radius: float
 var subdivision_level: int
 var hex_radius: float
-var unrevealed_material: StandardMaterial3D
+var tile_material_template: ShaderMaterial
 
-func generate(parent_node: Node3D, radius: float, subdivisions: int, material: StandardMaterial3D) -> Dictionary:
+# Optimization: Store generated meshes to reuse them
+var shared_hex_mesh: Mesh = null
+var shared_pent_mesh: Mesh = null
+
+func generate(parent_node: Node3D, radius: float, subdivisions: int, material_template: ShaderMaterial) -> Dictionary:
 	globe_radius = radius
 	subdivision_level = subdivisions
-	unrevealed_material = material
+	tile_material_template = material_template
 	
 	var start_time = Time.get_unix_time_from_system()
 	
 	# Generate icosphere vertices
 	var vertices = get_icosphere_vertices()
 
-	# Compute hex radius from neighbor spacing so edges touch: R = d / sqrt(3)
-	# Build adjacency like in calculate_neighbors but from faces directly
+	# Compute hex radius from neighbor spacing so edges touch
+	# We use the adjacency of the first few vertices to determine spacing
+	# (approximate based on average or min distance)
 	var neighbor_sets: Array = []
 	neighbor_sets.resize(vertices.size())
 	for i in range(vertices.size()):
@@ -33,24 +38,36 @@ func generate(parent_node: Node3D, radius: float, subdivisions: int, material: S
 		neighbor_sets[b][c] = true
 		neighbor_sets[c][a] = true
 		neighbor_sets[c][b] = true
+	
 	var min_d := INF
-	for i in range(vertices.size()):
+	# Check a sample of vertices to find minimum edge length
+	var check_count = min(vertices.size(), 50)
+	for i in range(check_count):
 		for k in neighbor_sets[i].keys():
 			var j: int = int(k)
 			var d = (vertices[i] * globe_radius).distance_to(vertices[j] * globe_radius)
 			if d < min_d:
 				min_d = d
+				
 	# Slightly reduce to prevent overlap
 	if min_d < INF:
-		hex_radius = (min_d / sqrt(3.0)) * 0.99
+		hex_radius = (min_d / sqrt(3.0)) * 0.98
+	else:
+		hex_radius = 1.0 # Fallback
+	
+	# Generate shared meshes
+	shared_hex_mesh = generate_tile_mesh(6)
+	shared_pent_mesh = generate_tile_mesh(5)
 	
 	# Create tiles at each vertex
 	var tiles = []
 	for i in range(vertices.size()):
-		var tile = create_tile_at_position(i, vertices[i], parent_node)
+		# The first 12 vertices (0-11) of an icosphere are always the pentagons in the dual
+		var is_pentagon = (i < 12)
+		var tile = create_tile_at_position(i, vertices[i], parent_node, is_pentagon)
 		tiles.append(tile)
 	
-	# Calculate neighbors
+	# Calculate neighbors (fully populate tile.neighbors)
 	calculate_neighbors(vertices, tiles)
 	
 	var end_time = Time.get_unix_time_from_system()
@@ -123,41 +140,20 @@ func get_midpoint(i1: int, i2: int, vertices: Array, cache: Dictionary) -> int:
 	cache[key] = index
 	return index
 
-func create_tile_at_position(index: int, pos: Vector3, parent_node: Node3D) -> Tile:
-	var world_pos = pos * globe_radius
-	var tile = Tile.new(index, pos, world_pos)
-	
-	# Create visual tile
-	var tile_node = StaticBody3D.new()
-	tile_node.name = "Tile_" + str(index)
-	# Ensure collisions are on a default visible layer/mask for ray picking
-	tile_node.collision_layer = 1
-	tile_node.collision_mask = 1
-	parent_node.add_child(tile_node)
-	
-	# Position on globe surface, but offset inward to obstruct interior
-	var inward_offset = pos.normalized() * 1.0 # Move 1 unit inward along normal
-	tile_node.global_position = (tile.world_position - inward_offset)
-	
-	# Orient to face outward from globe center
-	tile_node.look_at(tile_node.global_position + pos, Vector3.UP)
-	
-	# Create mesh with flat top and rounded edges using CSG
-	var mesh_instance = MeshInstance3D.new()
-
+func generate_tile_mesh(sides: int) -> Mesh:
 	# Create temporary CSG scene for mesh generation
 	var temp_csg = CSGCombiner3D.new()
 
-	# Main hexagonal cylinder body
+	# Main cylinder body
 	var csg_cylinder = CSGCylinder3D.new()
 	csg_cylinder.radius = hex_radius
 	csg_cylinder.height = 2.6 # Leave space for rounded edges
-	csg_cylinder.sides = 6 # Hexagonal shape
+	csg_cylinder.sides = sides
 	temp_csg.add_child(csg_cylinder)
 
 	# Add small spheres at corners for rounded edges
-	for i in range(6):
-		var angle = (i * PI * 2) / 6
+	for i in range(sides):
+		var angle = (i * PI * 2) / sides
 		var sphere = CSGSphere3D.new()
 		sphere.radius = hex_radius * 0.15 # Small radius for edge rounding
 		sphere.position = Vector3(
@@ -168,32 +164,77 @@ func create_tile_at_position(index: int, pos: Vector3, parent_node: Node3D) -> T
 		temp_csg.add_child(sphere)
 
 	# Bake the CSG mesh
+	temp_csg._update_shape() # Force update
 	var meshes = temp_csg.get_meshes()
 	var baked_mesh: Mesh = null
+	
 	if meshes.size() > 1:
 		baked_mesh = meshes[1] as Mesh
 	else:
-		# Fallback: create a simple cylinder mesh
+		# Fallback
 		var cylinder_mesh = CylinderMesh.new()
 		cylinder_mesh.top_radius = hex_radius
 		cylinder_mesh.bottom_radius = hex_radius
 		cylinder_mesh.height = 3.0
-		cylinder_mesh.radial_segments = 6
+		cylinder_mesh.radial_segments = sides
 		cylinder_mesh.rings = 2
 		baked_mesh = cylinder_mesh
+		
+	# Cleanup
+	temp_csg.queue_free()
+	
+	return baked_mesh
 
-	mesh_instance.mesh = baked_mesh
-	mesh_instance.material_override = unrevealed_material
-
-	# Rotate so the flat top faces outward
+func create_tile_at_position(index: int, pos: Vector3, parent_node: Node3D, is_pentagon: bool) -> Tile:
+	var world_pos = pos * globe_radius
+	var tile = Tile.new(index, pos, world_pos)
+	
+	# Create visual tile node
+	var tile_node = StaticBody3D.new()
+	tile_node.name = "Tile_" + str(index)
+	tile_node.collision_layer = 1
+	tile_node.collision_mask = 1
+	
+	# IMPORTANT: Add metadata for interaction system
+	tile_node.set_meta("tile_index", index)
+	
+	parent_node.add_child(tile_node)
+	
+	# Position on globe surface, but offset inward to obstruct interior
+	var inward_offset = pos.normalized() * 1.0 # Move 1 unit inward along normal
+	tile_node.global_position = (tile.world_position - inward_offset)
+	
+	# Orient to face outward from globe center
+	tile_node.look_at(tile_node.global_position + pos, Vector3.UP)
+	
+	# Create mesh instance using shared mesh
+	var mesh_instance = MeshInstance3D.new()
+	mesh_instance.mesh = shared_pent_mesh if is_pentagon else shared_hex_mesh
+	
+	# Create a unique material instance for this tile so we can change its uniforms independently
+	# For higher performance with thousands of tiles, we would use Instance Uniforms (Godot 4.x),
+	# but for simplicity and compatibility with the current shader structure, unique materials work well enough for < 1000 tiles.
+	# Given the Ultra target is 2500+ tiles, we should ideally use set_instance_shader_parameter,
+	# but that requires the shader to use `global uniform` or `instance uniform`.
+	# For this phase, let's stick to unique materials as per instructions, or better yet, use set_instance_shader_parameter if available.
+	# Checking Godot 4 docs: GeometryInstance3D.set_instance_shader_parameter is the way.
+	# However, to use that, the shader uniform needs `instance` keyword.
+	# Our shader doesn't have it yet.
+	# So we will clone the material for now to ensure functionality.
+	mesh_instance.material_override = tile_material_template.duplicate()
+	
+	# Rotate so the flat top faces outward (CSG cylinder is Y-up)
 	mesh_instance.rotate_x(deg_to_rad(90))
-	tile_node.add_child(mesh_instance) # Create collision (hexagonal prism via cylinder shape)
+	tile_node.add_child(mesh_instance)
+	
+	# Create collision shape
 	var collision = CollisionShape3D.new()
 	var cyl_shape = CylinderShape3D.new()
 	cyl_shape.radius = hex_radius
-	cyl_shape.height = 3.0 # Match total height of compound mesh
+	cyl_shape.height = 3.0
 	collision.shape = cyl_shape
-	# Match mesh rotation so the collision aligns with the visual
+	
+	# Match mesh rotation
 	collision.rotate_x(deg_to_rad(90))
 	tile_node.add_child(collision)
 	

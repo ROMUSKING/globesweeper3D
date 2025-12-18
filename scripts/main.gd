@@ -9,6 +9,7 @@ extends Node3D
 var tiles: Array = []
 const GlobeGeneratorScript = preload("res://scripts/globe_generator.gd")
 const AudioManagerScript = preload("res://scripts/audio_manager.gd")
+const InteractionManagerScript = preload("res://scripts/interaction_manager.gd")
 var globe_generator
 var audio_manager
 var game_over: bool = false
@@ -31,19 +32,36 @@ var game_statistics = {
 }
 
 # Input state
-var pressed_tile_index: int = -1
-var mouse_dragging: bool = false
-var mouse_down_pos: Vector2 = Vector2.ZERO
-const DRAG_THRESHOLD: float = 4.0
+var interaction_manager
+
+# Camera and Game Feel State
+var rotation_velocity: Vector2 = Vector2.ZERO
+const ROTATION_FRICTION: float = 0.95
+const ROTATION_SENSITIVITY: float = 0.003
+var target_zoom: float = 60.0
+var current_zoom: float = 60.0
+const ZOOM_SPEED: float = 5.0
+var shake_strength: float = 0.0
+const SHAKE_DECAY: float = 5.0
 
 # Hex tile sizing (computed to make edges touch)
 var hex_radius: float = 0.9
 
 # Materials
-var unrevealed_material: StandardMaterial3D
-var revealed_material: StandardMaterial3D
-var flagged_material: StandardMaterial3D
-var mine_material: StandardMaterial3D
+var tile_material_template: ShaderMaterial
+const TILE_SHADER = preload("res://shaders/tile.gdshader")
+
+const NEIGHBOR_COLORS = [
+	Color(0.8, 0.8, 0.8), # 0 - unused
+	Color(0.2, 0.6, 1.0), # 1 - blue
+	Color(0.2, 0.8, 0.2), # 2 - green
+	Color(1.0, 1.0, 0.2), # 3 - yellow
+	Color(0.6, 0.2, 0.6), # 4 - purple
+	Color(0.2, 0.8, 0.8), # 5 - cyan
+	Color(0.8, 0.8, 0.2), # 6 - yellow
+	Color(0.5, 0.5, 0.5), # 7 - gray
+	Color(0.4, 0.2, 1.0) # 8 - violet
+]
 
 # Performance monitoring
 var performance_stats = {
@@ -68,6 +86,14 @@ func _ready():
 	# Initialize audio manager
 	audio_manager = AudioManagerScript.new()
 	add_child(audio_manager)
+
+	# Initialize interaction manager
+	interaction_manager = InteractionManagerScript.new()
+	add_child(interaction_manager)
+	interaction_manager.tile_hovered.connect(_on_tile_hovered)
+	interaction_manager.tile_clicked.connect(_on_tile_clicked)
+	interaction_manager.drag_active.connect(_on_globe_dragged)
+	interaction_manager.zoom_changed.connect(_on_zoom_changed)
 	
 	# Ensure a container for fireworks exists
 	if not has_node("Fireworks"):
@@ -76,7 +102,9 @@ func _ready():
 		add_child(fw)
 	
 	# Position camera
-	$Camera3D.position = Vector3(0, 0, globe_radius * 3)
+	target_zoom = globe_radius * 3
+	current_zoom = target_zoom
+	$Camera3D.position = Vector3(0, 0, current_zoom)
 	
 	# Start game
 	generate_globe()
@@ -92,8 +120,35 @@ func _process(delta):
 		# Keep displaying current time when paused
 		ui.update_time(format_time(game_timer))
 	
+	_process_camera_feel(delta)
+	
 	# Update performance stats every frame
 	update_performance_stats()
+
+func _process_camera_feel(delta):
+	# Apply rotation momentum
+	if rotation_velocity.length_squared() > 0.000001:
+		$Globe.rotate_y(rotation_velocity.x)
+		$Globe.rotate_x(rotation_velocity.y)
+		rotation_velocity *= ROTATION_FRICTION
+		
+		# Stop if very slow
+		if rotation_velocity.length() < 0.0001:
+			rotation_velocity = Vector2.ZERO
+			
+	# Apply zoom smoothing
+	if abs(current_zoom - target_zoom) > 0.01:
+		current_zoom = lerp(current_zoom, target_zoom, delta * ZOOM_SPEED)
+		$Camera3D.position.z = current_zoom
+	
+	# Apply screen shake
+	if shake_strength > 0.01:
+		shake_strength = lerp(shake_strength, 0.0, SHAKE_DECAY * delta)
+		$Camera3D.h_offset = randf_range(-shake_strength, shake_strength)
+		$Camera3D.v_offset = randf_range(-shake_strength, shake_strength)
+	else:
+		$Camera3D.h_offset = 0
+		$Camera3D.v_offset = 0
 
 func format_time(time_seconds: float) -> String:
 	var minutes = int(time_seconds) / 60
@@ -101,29 +156,8 @@ func format_time(time_seconds: float) -> String:
 	return "%02d:%02d" % [minutes, seconds]
 
 func setup_materials():
-	# Unrevealed tiles - dark gray
-	unrevealed_material = StandardMaterial3D.new()
-	unrevealed_material.albedo_color = Color(0.3, 0.3, 0.3)
-	unrevealed_material.metallic = 0.1
-	unrevealed_material.roughness = 0.7
-	
-	# Revealed tiles - light blue
-	revealed_material = StandardMaterial3D.new()
-	revealed_material.albedo_color = Color(0.7, 0.8, 1.0)
-	revealed_material.metallic = 0.0
-	revealed_material.roughness = 0.5
-	
-	# Flagged tiles - red
-	flagged_material = StandardMaterial3D.new()
-	flagged_material.albedo_color = Color(1.0, 0.2, 0.2)
-	flagged_material.metallic = 0.0
-	flagged_material.roughness = 0.6
-	
-	# Mine tiles - dark red
-	mine_material = StandardMaterial3D.new()
-	mine_material.albedo_color = Color(0.8, 0.1, 0.1)
-	mine_material.metallic = 0.2
-	mine_material.roughness = 0.4
+	tile_material_template = ShaderMaterial.new()
+	tile_material_template.shader = TILE_SHADER
 
 func generate_globe():
 	# Clear existing tiles
@@ -131,7 +165,7 @@ func generate_globe():
 		child.free()
 	tiles.clear()
 	
-	var result = globe_generator.generate($Globe, globe_radius, subdivision_level, unrevealed_material)
+	var result = globe_generator.generate($Globe, globe_radius, subdivision_level, tile_material_template)
 	tiles = result.tiles
 	hex_radius = result.hex_radius
 	performance_stats.generation_time = result.generation_time
@@ -196,74 +230,38 @@ func _input(event):
 					resume_game()
 				else:
 					pause_game()
-			return # Don't process mouse input when space is pressed
 		elif event.keycode == KEY_F12:
 			print_performance_report()
-			return
-	
-	if event is InputEventMouseButton:
-		var tile = get_tile_under_mouse(event.position)
-		# LEFT PRESS: record pressed tile, reset drag
-		if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-			pressed_tile_index = tile.index if tile != null else -1
-			mouse_dragging = false
-			mouse_down_pos = event.position
-			# Double-click chord: immediate chord on already revealed numbered tiles
-			if tile and event.double_click:
-				if tile.is_revealed and tile.neighbor_mines > 0:
-					chord_reveal(tile)
-				else:
-					# Optional: allow double-click to also reveal immediately
-					reveal_tile(tile)
-		# LEFT RELEASE: reveal only if no drag and same tile under cursor
-		elif event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-			var release_tile = tile
-			if not mouse_dragging and release_tile and pressed_tile_index == release_tile.index:
-				reveal_tile(release_tile)
-			pressed_tile_index = -1
-			mouse_dragging = false
-			mouse_down_pos = Vector2.ZERO
-		# RIGHT PRESS: toggle flag immediately
-		elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed and tile:
-			toggle_flag(tile)
 
-	if event is InputEventScreenTouch and event.pressed and event.double_tap:
-		var t = get_tile_under_mouse(event.position)
-		if t:
-			if t.is_revealed and t.neighbor_mines > 0:
-				chord_reveal(t)
-			else:
-				reveal_tile(t)
-	
-	if event is InputEventMouseMotion and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		# Determine drag based on threshold from initial press
-		if (event.position - mouse_down_pos).length() > DRAG_THRESHOLD:
-			mouse_dragging = true
-		# Rotate globe once we are dragging, even if cursor is over a tile
-		if mouse_dragging:
-			# Inverted controls: drag right -> globe rotates right; drag up -> globe rotates up
-			$Globe.rotate_y(event.relative.x * 0.01)
-			$Globe.rotate_x(event.relative.y * 0.01)
+func _on_tile_hovered(index: int):
+	# Debug print to verify interaction system
+	# print("Main Hovered: ", index)
+	pass
 
-func get_tile_under_mouse(mouse_pos: Vector2):
-	var camera = $Camera3D
-	var from = camera.project_ray_origin(mouse_pos)
-	var to = from + camera.project_ray_normal(mouse_pos) * 1000
+func _on_tile_clicked(index: int, button_index: int):
+	if game_over or game_won or game_paused:
+		return
+		
+	var tile = tiles[index]
 	
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(from, to)
-	var result = space_state.intersect_ray(query)
-	
-	if result and "collider" in result:
-		var node = result.collider as Node
-		# Walk up parents to find the Tile_* StaticBody3D
-		while node and node is Node:
-			if node.name.begins_with("Tile_"):
-				var index = int(node.name.substr(5))
-				return tiles[index]
-			node = node.get_parent()
-	
-	return null
+	if button_index == MOUSE_BUTTON_LEFT:
+		if tile.is_revealed and tile.neighbor_mines > 0:
+			# TODO: Restore chord functionality if needed
+			pass
+		else:
+			reveal_tile(tile)
+	elif button_index == MOUSE_BUTTON_RIGHT:
+		toggle_flag(tile)
+
+func _on_globe_dragged(relative: Vector2):
+	# Add momentum to rotation
+	# Inverted controls: drag right -> globe rotates right
+	rotation_velocity.x += relative.x * ROTATION_SENSITIVITY
+	rotation_velocity.y += relative.y * ROTATION_SENSITIVITY
+
+func _on_zoom_changed(amount: float):
+	target_zoom += amount * 5.0
+	target_zoom = clamp(target_zoom, globe_radius * 1.2, globe_radius * 5.0)
 
 func reveal_tile(tile):
 	if tile.is_revealed or tile.is_flagged:
@@ -286,31 +284,23 @@ func reveal_tile(tile):
 	# Play tile reveal sound
 	audio_manager.play_reveal_sound()
 	
-	# Color mapping for neighboring mines (1-8)
-	var color_map = [
-		Color(0.8, 0.8, 0.8), # 0 - unused
-		Color(0.2, 0.6, 1.0), # 1 - blue
-		Color(0.2, 0.8, 0.2), # 2 - green
-		Color(1.0, 1.0, 0.2), # 3 - yellow (was orange)
-		Color(0.6, 0.2, 0.6), # 4 - purple (was red)
-		Color(0.2, 0.8, 0.8), # 5 - cyan
-		Color(0.8, 0.8, 0.2), # 6 - yellow
-		Color(0.5, 0.5, 0.5), # 7 - gray
-		Color(0.4, 0.2, 1.0) # 8 - violet
-	]
-
-	if tile.is_revealed and not tile.has_mine:
-		var mesh_instance = tile.mesh
-		var mat = revealed_material.duplicate()
-		var n = clamp(tile.neighbor_mines, 0, 8)
-		mat.albedo_color = color_map[n]
-		mesh_instance.material_override = mat
+	# Animate reveal if it's a safe tile
+	if not tile.has_mine:
+		var mesh = tile.mesh
+		var tween = create_tween()
+		tween.tween_property(mesh, "scale", Vector3(1, 0.1, 1), 0.1)
+		tween.tween_callback(func(): _apply_reveal_visuals(tile))
+		tween.tween_property(mesh, "scale", Vector3(1, 1.1, 1), 0.1)
+		tween.tween_property(mesh, "scale", Vector3.ONE, 0.1)
 	
 	if tile.has_mine:
 		# Game over
 		game_over = true
 		game_paused = true # Stop timer
 		update_game_statistics() # Update stats for loss
+		
+		# Trigger screen shake
+		shake_strength = 2.5
 		
 		# Play mine explosion sound
 		audio_manager.play_explosion_sound()
@@ -358,10 +348,18 @@ func toggle_flag(tile):
 	
 	tile.is_flagged = not tile.is_flagged
 	
-	if tile.is_flagged:
-		tile.mesh.material_override = flagged_material
-	else:
-		tile.mesh.material_override = unrevealed_material
+	var mat = tile.mesh.material_override as ShaderMaterial
+	if mat:
+		if tile.is_flagged:
+			mat.set_shader_parameter("u_state", 2.0) # Flagged
+		else:
+			mat.set_shader_parameter("u_state", 0.0) # Unrevealed
+	
+	# Animate flag toggle
+	var mesh = tile.mesh
+	var tween = create_tween()
+	tween.tween_property(mesh, "scale", Vector3(1.2, 1.2, 1.2), 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(mesh, "scale", Vector3.ONE, 0.1)
 	
 	update_mine_counter()
 
@@ -405,7 +403,9 @@ func reveal_all_mines():
 	for tile in tiles:
 		if tile.has_mine:
 			tile.is_revealed = true
-			tile.mesh.material_override = mine_material
+			var mat = tile.mesh.material_override as ShaderMaterial
+			if mat:
+				mat.set_shader_parameter("u_state", 3.0) # Mine
 			add_number_to_tile(tile, "*")
 
 func check_win_condition():
@@ -494,10 +494,11 @@ func reset_game():
 	game_won = false
 	# Reset globe orientation and camera position to defaults for consistency after reset
 	$Globe.rotation = Vector3.ZERO
-	$Camera3D.position = Vector3(0, 0, globe_radius * 3)
+	rotation_velocity = Vector2.ZERO
+	target_zoom = globe_radius * 3
+	current_zoom = target_zoom
+	$Camera3D.position = Vector3(0, 0, current_zoom)
 	# Reset input state
-	pressed_tile_index = -1
-	mouse_dragging = false
 	if ui and ui.has_method("hide_game_over"):
 		ui.hide_game_over()
 	# Clear any fireworks effects
@@ -574,3 +575,12 @@ func get_performance_report() -> String:
 
 func print_performance_report():
 	print(get_performance_report())
+
+func _apply_reveal_visuals(tile):
+	if tile.is_revealed and not tile.has_mine:
+		var mesh_instance = tile.mesh
+		var mat = mesh_instance.material_override as ShaderMaterial
+		if mat:
+			var n = clamp(tile.neighbor_mines, 0, 8)
+			mat.set_shader_parameter("u_state", 1.0) # Revealed
+			mat.set_shader_parameter("u_revealed_color", NEIGHBOR_COLORS[n])

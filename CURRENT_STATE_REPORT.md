@@ -13,20 +13,18 @@ According to the documentation (`PROGRESS_REPORT.md`), the project has completed
 
 ## 3. Code Quality Assessment
 
-The codebase consists of ~1000 lines of GDScript across 4 files.
+The codebase consists of ~1000 lines of GDScript across 5 files.
 
 * **Strengths**:
   * **Data Separation**: The `Tile` class (`scripts/tile.gd`) correctly uses `RefCounted` to separate data from the scene tree, optimizing performance.
+  * **Modular Architecture**: Logic is split between `Main.gd` (controller), `GlobeGenerator.gd` (geometry), and `AudioManager.gd` (audio).
   * **Clean Logic**: Core algorithms for icosphere generation and recursive clearing are well-implemented and readable.
+  * **Signal-based UI**: `scripts/ui.gd` uses signals to communicate with the main controller, avoiding brittle node path traversal.
 * **Weaknesses**:
-  * **"God Object" Pattern**: `scripts/main.gd` is becoming monolithic (nearly 900 lines), handling input, game logic, mesh generation, *and* audio synthesis.
-  * **Coupling**: `scripts/ui.gd` relies on brittle node path traversal (`get_node("../")`) rather than Signals, making the UI harder to reuse or refactor.
-  * **Deprecated Code**: `scripts/audio_generator.gd` appears to be unused legacy code, as audio logic has been moved into `main.gd`.
+  * **Input Complexity**: `Main.gd` still handles a lot of input logic which could potentially be moved to a dedicated input handler.
+  * **Procedural Audio Complexity**: The `AudioManager.gd` uses low-level `AudioStreamGenerator` which is powerful but complex to maintain.
 
-## 4. Discrepancies (Docs vs. Code)
+## 4. Discrepancies (Docs vs. Code) - RESOLVED
 
-The most significant finding is a missing feature that is claimed to be implemented:
-
-* **CRITICAL**: **First-Click Safety is Missing**.
-  * *Documentation*: Claims a "First-click safety guarantee."
-  * *Implementation*: `main.gd` places mines inside the `_ready()` function, *before* the user interacts. There is no logic to relocate a mine if the user clicks on one. The player can currently lose on the very first click.
+* **First-Click Safety**: **Implemented**.
+  * *Implementation*: `main.gd` now delays mine placement until the first tile is revealed in `reveal_tile()`. The `place_mines()` function excludes the clicked tile and its immediate neighbors, ensuring a safe starting area.

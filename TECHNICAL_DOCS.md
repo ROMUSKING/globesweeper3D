@@ -2,42 +2,37 @@
 
 ## Core Components
 
-**Main.gd (881 lines)** - Primary ga## Build & Deployment
+**Main.gd** - Primary game controller
 
-- **Export Templates**: Configured for multiple platforms
-- **Resource Optimization**: Automatic texture compression
-- **Script Compilation**: AOT compilation for performance
-- **Distribution**: Single executable with no external dependencies
+- Manages game state (timer, win/lose conditions, statistics)
+- Handles input coordination (rotation vs. interaction)
+- Coordinates between `GlobeGenerator`, `AudioManager`, and `UI`
+- Implements first-click safety and mine placement logic
 
-## Performance Characteristics
+**GlobeGenerator.gd** - Geometry generation system
 
-- Globe/icosphere generation with configurable subdivision levels
-- Mine placement and neighbor calculation algorithms
-- Input handling (mouse, touch, keyboard) with F12 performance monitoring
-- Game state management (win/lose conditions) with timer and statistics
-- Visual effects (fireworks, materials, enhanced tile geometry)
-- UI coordination with real-time updates
-- Audio system integration with procedural sound generation
-- Performance monitoring and optimization tracking
+- Handles icosphere generation and subdivision
+- Converts triangular faces to hexagonal tile positions
+- Instantiates `Tile` objects and their visual nodes (`StaticBody3D`)
+- Calculates tile neighbors for adjacency logic
 
-**UI.gd (30 lines)** - User interface management
+**AudioManager.gd** - Procedural audio system
+
+- Dynamic sound effect generation using `AudioStreamGenerator`
+- Tile reveal, explosion, win, and lose sound algorithms
+- Real-time audio synthesis without external files
+
+**UI.gd** - User interface management
 
 - HUD management with mine counter, timer, and game status
-- Button handling for reset functionality
+- Communicates with `Main.gd` via signals
 - Real-time UI updates during gameplay
-- Statistics display and game history tracking
 
 **Tile.gd** - Tile data structure
 
-- Properties for tile state and position
-- References to visual nodes and neighbors
-- Enhanced collision detection for taller tiles
-
-**Audio_Generator.gd (50 lines)** - Procedural audio system
-
-- Dynamic sound effect generation using AudioStreamGenerator
-- Tile reveal, explosion, win, and lose sound algorithms
-- Real-time audio synthesis without external files
+- `RefCounted` class representing a single tile's state
+- Properties for index, position, mine status, revelation, and neighbors
+- References to visual nodes and meshes
 
 ## Key Algorithms
 
@@ -126,21 +121,22 @@
 
 ## Data Structures
 
-### Tile Dictionary
+### Tile Class (scripts/tile.gd)
 
 ```gdscript
-{
-    "index": int,                    # Unique identifier
-    "position": Vector3,             # Unit sphere position
-    "world_position": Vector3,       # Scaled world coordinates
-    "has_mine": bool,                # Mine presence
-    "is_revealed": bool,             # Current revelation state
-    "is_flagged": bool,              # Flag state
-    "neighbor_mines": int,           # Adjacent mine count (0-8)
-    "neighbors": Array,              # Array of adjacent tile indices
-    "node": StaticBody3D,            # Visual node reference
-    "mesh": MeshInstance3D           # Mesh component reference
-}
+class_name Tile
+extends RefCounted
+
+var index: int                   # Unique identifier
+var position: Vector3            # Normalized position on unit sphere
+var world_position: Vector3      # Scaled world coordinates
+var has_mine: bool = false       # Mine presence
+var neighbor_mines: int = 0      # Adjacent mine count
+var is_revealed: bool = false    # Current revelation state
+var is_flagged: bool = false     # Flag state
+var neighbors: Array = []        # Array of adjacent tile indices
+var node: Node3D                 # Visual node reference (StaticBody3D)
+var mesh: MeshInstance3D         # Mesh component reference
 ```
 
 ## Controls
@@ -182,3 +178,71 @@
 - Verify neighbor calculations
 - Test input handling across platforms
 - Performance testing with various configurations
+
+# Phase 5: Visual Polish & Mechanics Refinement
+
+## Visual Architecture
+
+### Shader-Based Material System
+
+Instead of swapping distinct `StandardMaterial3D` resources, we will utilize a unified `ShaderMaterial` for all tiles. This improves batching and allows for smooth transitions.
+
+**Shader Logic (`tiles.gdshader`):**
+
+- **Uniforms:**
+  - `vec3 u_base_color`: Color for the unrevealed state.
+  - `vec3 u_revealed_color`: Color for the revealed state.
+  - `float u_state`: Integer/Float representing state (0=Hidden, 1=Revealed, 2=Flagged, 3=Mine).
+  - `float u_hover_intensity`: 0.0 to 1.0 for hover highlight logic (if tile-based hover is used).
+  - `sampler2D u_noise_texture`: For surface detail/roughness variation.
+- **Fragment Shader:**
+  - Mixes colors based on `u_state`.
+  - Adds a rim light effect (Fresnel) to accentuate the 3D curvature.
+  - Optional: Subtle pulse effect for unrevealed tiles.
+
+### Cursor System
+
+To avoid modifying thousands of tile materials per frame for hover effects, we will implement a dedicated **Cursor** object.
+
+- **Visual:** A glowing wireframe hexagon mesh.
+- **Behavior:** The cursor snaps to the `global_position` and `rotation` of the currently hovered tile.
+- **Benefit:** Decouples the "selection" visual from the "tile" visual, allowing for a high-fidelity selection effect without uniform updates on the terrain.
+
+## Interaction Design
+
+### InteractionManager
+
+A dedicated node `InteractionManager` (or `InteractionController`) will handle input raycasting, decoupling it from `Main.gd`.
+
+**Core Logic:**
+
+1. **Input Processing:** Listens to `_unhandled_input` or `_physics_process` for mouse/touch events.
+2. **Raycasting:** Uses `PhysicsDirectSpaceState3D` to detect collisions.
+3. **Identification:**
+    - **Refinement:** Instead of parsing string names (`Tile_123`), we will assign metadata to the `StaticBody3D` nodes during generation: `collision_object.set_meta("tile_index", index)`.
+    - The raycast result simply retrieves `collider.get_meta("tile_index")`.
+4. **Signals:**
+    - `tile_hovered(index: int)`
+    - `tile_clicked(index: int, button: int)`
+    - `background_dragged(relative: Vector2)`
+
+### Camera & Controls
+
+- **Orbiting:** Continue using the existing rotation logic but move it to a `CameraController`.
+- **Smoothing (Momentum):** Implement an inertia system.
+  - `angular_velocity`: Adds to rotation every frame.
+  - `drag`: Decays velocity over time.
+  - Mouse drag adds to `angular_velocity` instead of directly setting rotation.
+
+## Animation Strategy
+
+### Reveal Animations
+
+Avoid instant state changes. Use `Tween` for "Game Feel".
+
+- **Sequence:**
+  1. **Squash:** Scale Y down to 0.1 over 0.1s.
+  2. **State Change:** Update internal state (is_revealed) and visuals (add number, change color).
+  3. **Stretch:** Scale Y up to 1.1 over 0.1s.
+  4. **Settle:** Scale Y back to 1.0 over 0.05s.
+- **Audio Sync:** Trigger "pop" sound at the start of the sequence.
