@@ -7,23 +7,20 @@ extends Node3D
 @export var tile_scale: float = 1.8
 
 var tiles: Array = []
-var icosphere_faces: Array = []
+const GlobeGeneratorScript = preload("res://scripts/globe_generator.gd")
+const AudioManagerScript = preload("res://scripts/audio_manager.gd")
+var globe_generator
+var audio_manager
 var game_over: bool = false
 var game_won: bool = false
 var ui_scene = preload("res://scenes/ui.tscn")
 var ui
 
-# Audio nodes
-var background_audio_stream_player: AudioStreamPlayer
-var tile_reveal_sound: AudioStreamPlayer
-var mine_explosion_sound: AudioStreamPlayer
-var game_win_sound: AudioStreamPlayer
-var game_lose_sound: AudioStreamPlayer
-
 # Timer and statistics
 var game_timer: float = 0.0
 var game_paused: bool = false
 var game_started: bool = false
+var mines_placed: bool = false
 var game_statistics = {
 	"games_played": 0,
 	"games_won": 0,
@@ -62,17 +59,15 @@ var performance_stats = {
 func _ready():
 	setup_materials()
 	ui = ui_scene.instantiate()
+	ui.game_reset_requested.connect(reset_game)
 	add_child(ui)
 	
-	# Initialize audio nodes
-	background_audio_stream_player = $Audio/BackgroundMusic
-	tile_reveal_sound = $Audio/TileReveal
-	mine_explosion_sound = $Audio/MineExplosion
-	game_win_sound = $Audio/GameWin
-	game_lose_sound = $Audio/GameLose
+	globe_generator = GlobeGeneratorScript.new()
+	add_child(globe_generator)
 	
-	# Setup procedural audio
-	setup_audio()
+	# Initialize audio manager
+	audio_manager = AudioManagerScript.new()
+	add_child(audio_manager)
 	
 	# Ensure a container for fireworks exists
 	if not has_node("Fireworks"):
@@ -85,8 +80,7 @@ func _ready():
 	
 	# Start game
 	generate_globe()
-	place_mines()
-	calculate_neighbor_counts()
+	mines_placed = false
 	update_mine_counter()
 	load_game_statistics()
 
@@ -131,374 +125,36 @@ func setup_materials():
 	mine_material.metallic = 0.2
 	mine_material.roughness = 0.4
 
-func setup_audio():
-	# Create procedural sound effects
-	create_tile_reveal_sound()
-	create_mine_explosion_sound()
-	create_game_win_sound()
-	create_game_lose_sound()
-	create_background_music()
-
-func create_tile_reveal_sound():
-	var stream = AudioStreamGenerator.new()
-	stream.mix_rate = 22050
-	stream.buffer_length = 0.1
-	tile_reveal_sound.stream = stream
-
-func create_mine_explosion_sound():
-	var stream = AudioStreamGenerator.new()
-	stream.mix_rate = 22050
-	stream.buffer_length = 0.3
-	mine_explosion_sound.stream = stream
-
-func create_game_win_sound():
-	var stream = AudioStreamGenerator.new()
-	stream.mix_rate = 22050
-	stream.buffer_length = 0.8
-	game_win_sound.stream = stream
-
-func create_game_lose_sound():
-	var stream = AudioStreamGenerator.new()
-	stream.mix_rate = 22050
-	stream.buffer_length = 0.8
-	game_lose_sound.stream = stream
-
-func create_background_music():
-	var stream = AudioStreamGenerator.new()
-	stream.mix_rate = 22050
-	stream.buffer_length = 10.0
-	background_audio_stream_player.stream = stream
-
-func play_tile_reveal_sound():
-	if not tile_reveal_sound.stream:
-		return
-	
-	tile_reveal_sound.play()
-	var playback = tile_reveal_sound.get_stream_playback()
-	var sample_rate = 22050
-	var duration = 0.1
-	var samples = int(sample_rate * duration)
-	
-	for i in range(samples):
-		var t = float(i) / sample_rate
-		var freq = 1000 - (t * 500) # Descending frequency
-		var sample = sin(t * freq * 2 * PI) * (1.0 - t / duration) * 0.3
-		playback.push_frame(Vector2(sample, sample))
-	
-	tile_reveal_sound.play()
-
-func play_mine_explosion_sound():
-	if not mine_explosion_sound.stream:
-		return
-	
-	mine_explosion_sound.play()
-	var playback = mine_explosion_sound.get_stream_playback()
-	var sample_rate = 22050
-	var duration = 0.3
-	var samples = int(sample_rate * duration)
-	
-	for i in range(samples):
-		var t = float(i) / sample_rate
-		var noise = randf() * 2.0 - 1.0
-		var envelope = sin(t * PI / duration) * exp(-t * 2.0)
-		var sample = noise * envelope * 0.4
-		playback.push_frame(Vector2(sample, sample))
-
-func play_game_win_sound():
-	if not game_win_sound.stream:
-		return
-	
-	game_win_sound.play()
-	var playback = game_win_sound.get_stream_playback()
-	var sample_rate = 22050
-	var duration = 0.8
-	var samples = int(sample_rate * duration)
-	
-	var notes = [523.25, 659.25, 783.99, 1046.50] # C, E, G, C
-	
-	for i in range(samples):
-		var t = float(i) / sample_rate
-		var note_index = int(t * 4) % 4
-		var freq = notes[note_index]
-		var envelope = sin(t * PI / duration)
-		var sample = sin(t * freq * 2 * PI) * envelope * 0.2
-		playback.push_frame(Vector2(sample, sample))
-
-func play_game_lose_sound():
-	if not game_lose_sound.stream:
-		return
-	
-	game_lose_sound.play()
-	var playback = game_lose_sound.get_stream_playback()
-	var sample_rate = 22050
-	var duration = 0.8
-	var samples = int(sample_rate * duration)
-	
-	var notes = [392.00, 329.63, 261.63, 196.00] # G, E, C, G
-	
-	for i in range(samples):
-		var t = float(i) / sample_rate
-		var note_index = int(t * 4) % 4
-		var freq = notes[note_index]
-		var envelope = sin(t * PI / duration)
-		var sample = sin(t * freq * 2 * PI) * envelope * 0.15
-		playback.push_frame(Vector2(sample, sample))
-	
-	game_lose_sound.play()
-	# Unrevealed tiles - dark gray
-	unrevealed_material = StandardMaterial3D.new()
-	unrevealed_material.albedo_color = Color(0.3, 0.3, 0.3)
-	unrevealed_material.metallic = 0.1
-	unrevealed_material.roughness = 0.7
-	
-	# Revealed tiles - light blue
-	revealed_material = StandardMaterial3D.new()
-	revealed_material.albedo_color = Color(0.7, 0.8, 1.0)
-	revealed_material.metallic = 0.0
-	revealed_material.roughness = 0.5
-	
-	# Flagged tiles - red
-	flagged_material = StandardMaterial3D.new()
-	flagged_material.albedo_color = Color(1.0, 0.2, 0.2)
-	flagged_material.metallic = 0.0
-	flagged_material.roughness = 0.6
-	
-	# Mine tiles - dark red
-	mine_material = StandardMaterial3D.new()
-	mine_material.albedo_color = Color(0.8, 0.1, 0.1)
-	mine_material.metallic = 0.2
-	mine_material.roughness = 0.4
-
 func generate_globe():
-	var start_time = Time.get_unix_time_from_system()
-	
 	# Clear existing tiles
 	for child in $Globe.get_children():
 		child.free()
 	tiles.clear()
 	
-	# Generate icosphere vertices
-	var vertices = get_icosphere_vertices()
+	var result = globe_generator.generate($Globe, globe_radius, subdivision_level, unrevealed_material)
+	tiles = result.tiles
+	hex_radius = result.hex_radius
+	performance_stats.generation_time = result.generation_time
 
-	# Compute hex radius from neighbor spacing so edges touch: R = d / sqrt(3)
-	# Build adjacency like in calculate_neighbors but from faces directly
-	var neighbor_sets: Array = []
-	neighbor_sets.resize(vertices.size())
-	for i in range(vertices.size()):
-		neighbor_sets[i] = {}
-	for face in icosphere_faces:
-		var a: int = face[0]
-		var b: int = face[1]
-		var c: int = face[2]
-		neighbor_sets[a][b] = true
-		neighbor_sets[a][c] = true
-		neighbor_sets[b][a] = true
-		neighbor_sets[b][c] = true
-		neighbor_sets[c][a] = true
-		neighbor_sets[c][b] = true
-	var min_d := INF
-	for i in range(vertices.size()):
-		for k in neighbor_sets[i].keys():
-			var j: int = int(k)
-			var d = (vertices[i] * globe_radius).distance_to(vertices[j] * globe_radius)
-			if d < min_d:
-				min_d = d
-	# Slightly reduce to prevent overlap
-	if min_d < INF:
-		hex_radius = (min_d / sqrt(3.0)) * 0.99
+func place_mines(excluded_tile_index: int = -1):
+	var num_mines = int(tiles.size() * mine_percentage)
+	var available_tiles = []
 	
-	# Create tiles at each vertex
-	for i in range(vertices.size()):
-		create_tile_at_position(i, vertices[i])
-	
-	# Calculate neighbors
-	calculate_neighbors(vertices)
-	
-	# Record generation time
-	var end_time = Time.get_unix_time_from_system()
-	performance_stats.generation_time = end_time - start_time
-
-func get_icosphere_vertices() -> Array:
-	# Start with icosahedron vertices
-	var phi = (1.0 + sqrt(5.0)) / 2.0 # Golden ratio
-	var vertices = [
-		Vector3(-1, phi, 0), Vector3(1, phi, 0), Vector3(-1, -phi, 0), Vector3(1, -phi, 0),
-		Vector3(0, -1, phi), Vector3(0, 1, phi), Vector3(0, -1, -phi), Vector3(0, 1, -phi),
-		Vector3(phi, 0, -1), Vector3(phi, 0, 1), Vector3(-phi, 0, -1), Vector3(-phi, 0, 1)
-	]
-	
-	# Normalize to unit sphere
-	for i in range(vertices.size()):
-		vertices[i] = vertices[i].normalized()
-	
-	# Subdivide for more tiles
-	var faces = [
-		[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
-		[1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
-		[3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
-		[4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]
-	]
-	
-	for level in range(subdivision_level):
-		var new_vertices = vertices.duplicate()
-		var new_faces = []
-		var midpoint_cache = {}
-		
-		for face in faces:
-			var v1 = face[0]
-			var v2 = face[1]
-			var v3 = face[2]
-			
-			var a = get_midpoint(v1, v2, new_vertices, midpoint_cache)
-			var b = get_midpoint(v2, v3, new_vertices, midpoint_cache)
-			var c = get_midpoint(v3, v1, new_vertices, midpoint_cache)
-			
-			new_faces.append([v1, a, c])
-			new_faces.append([v2, b, a])
-			new_faces.append([v3, c, b])
-			new_faces.append([a, b, c])
-		
-		vertices = new_vertices
-		faces = new_faces
-	
-	# Persist faces for adjacency calculation
-	icosphere_faces = faces
-	return vertices
-
-func get_midpoint(i1: int, i2: int, vertices: Array, cache: Dictionary) -> int:
-	var key = [min(i1, i2), max(i1, i2)]
-	if key in cache:
-		return cache[key]
-	
-	var v1 = vertices[i1]
-	var v2 = vertices[i2]
-	var midpoint = ((v1 + v2) / 2.0).normalized()
-	
-	vertices.append(midpoint)
-	var index = vertices.size() - 1
-	cache[key] = index
-	return index
-
-func create_tile_at_position(index: int, pos: Vector3):
-	var tile_data = {
-		"index": index,
-		"position": pos,
-		"world_position": pos * globe_radius,
-		"has_mine": false,
-		"is_revealed": false,
-		"is_flagged": false,
-		"neighbor_mines": 0,
-		"neighbors": []
-	}
-	
-	# Create visual tile
-	var tile_node = StaticBody3D.new()
-	tile_node.name = "Tile_" + str(index)
-	# Ensure collisions are on a default visible layer/mask for ray picking
-	tile_node.collision_layer = 1
-	tile_node.collision_mask = 1
-	$Globe.add_child(tile_node)
-	
-	# Position on globe surface, but offset inward to obstruct interior
-	var inward_offset = pos.normalized() * 1.0 # Move 1 unit inward along normal
-	tile_node.global_position = (tile_data.world_position - inward_offset)
-	
-	# Orient to face outward from globe center
-	tile_node.look_at(tile_node.global_position + pos, Vector3.UP)
-	
-	# Create mesh with flat top and rounded edges using CSG
-	var mesh_instance = MeshInstance3D.new()
-
-	# Create temporary CSG scene for mesh generation
-	var temp_csg = CSGCombiner3D.new()
-
-	# Main hexagonal cylinder body
-	var csg_cylinder = CSGCylinder3D.new()
-	csg_cylinder.radius = hex_radius
-	csg_cylinder.height = 2.6 # Leave space for rounded edges
-	csg_cylinder.sides = 6 # Hexagonal shape
-	temp_csg.add_child(csg_cylinder)
-
-	# Add small spheres at corners for rounded edges
-	for i in range(6):
-		var angle = (i * PI * 2) / 6
-		var sphere = CSGSphere3D.new()
-		sphere.radius = hex_radius * 0.15 # Small radius for edge rounding
-		sphere.position = Vector3(
-			cos(angle) * hex_radius,
-			1.3, # Position at top of cylinder
-			sin(angle) * hex_radius
-		)
-		temp_csg.add_child(sphere)
-
-	# Bake the CSG mesh
-	var meshes = temp_csg.get_meshes()
-	var baked_mesh: Mesh = null
-	if meshes.size() > 1:
-		baked_mesh = meshes[1] as Mesh
-	else:
-		# Fallback: create a simple cylinder mesh
-		var cylinder_mesh = CylinderMesh.new()
-		cylinder_mesh.top_radius = hex_radius
-		cylinder_mesh.bottom_radius = hex_radius
-		cylinder_mesh.height = 3.0
-		cylinder_mesh.radial_segments = 6
-		cylinder_mesh.rings = 2
-		baked_mesh = cylinder_mesh
-
-	mesh_instance.mesh = baked_mesh
-	mesh_instance.material_override = unrevealed_material
-
-	# Rotate so the flat top faces outward
-	mesh_instance.rotate_x(deg_to_rad(90))
-	tile_node.add_child(mesh_instance) # Create collision (hexagonal prism via cylinder shape)
-	var collision = CollisionShape3D.new()
-	var cyl_shape = CylinderShape3D.new()
-	cyl_shape.radius = hex_radius
-	cyl_shape.height = 3.0 # Match total height of compound mesh
-	collision.shape = cyl_shape
-	# Match mesh rotation so the collision aligns with the visual
-	collision.rotate_x(deg_to_rad(90))
-	tile_node.add_child(collision)
-	
-	# Store references
-	tile_data["node"] = tile_node
-	tile_data["mesh"] = mesh_instance
-	tiles.append(tile_data)
-
-func calculate_neighbors(vertices: Array):
-	# Build adjacency from icosphere face edges (exact hex/pent adjacency)
-	var neighbor_sets: Array = []
-	neighbor_sets.resize(vertices.size())
-	for i in range(vertices.size()):
-		neighbor_sets[i] = {}
-	
-	for face in icosphere_faces:
-		var a: int = face[0]
-		var b: int = face[1]
-		var c: int = face[2]
-		# Undirected edges
-		neighbor_sets[a][b] = true
-		neighbor_sets[a][c] = true
-		neighbor_sets[b][a] = true
-		neighbor_sets[b][c] = true
-		neighbor_sets[c][a] = true
-		neighbor_sets[c][b] = true
+	var excluded_indices = {}
+	if excluded_tile_index != -1:
+		excluded_indices[excluded_tile_index] = true
+		# Also exclude neighbors for a safe start area
+		for neighbor_idx in tiles[excluded_tile_index].neighbors:
+			excluded_indices[neighbor_idx] = true
 	
 	for i in range(tiles.size()):
-		var set_dict: Dictionary = neighbor_sets[i]
-		# Convert keys to array of indices
-		var arr: Array = []
-		for k in set_dict.keys():
-			arr.append(int(k))
-		tiles[i].neighbors = arr
-
-func place_mines():
-	var num_mines = int(tiles.size() * mine_percentage)
-	var available_tiles = range(tiles.size())
+		if not i in excluded_indices:
+			available_tiles.append(i)
+	
 	available_tiles.shuffle()
 	
-	for i in range(num_mines):
+	var mines_to_place = min(num_mines, available_tiles.size())
+	for i in range(mines_to_place):
 		tiles[available_tiles[i]].has_mine = true
 
 func calculate_neighbor_counts():
@@ -512,11 +168,17 @@ func calculate_neighbor_counts():
 
 func update_mine_counter():
 	var total_mines = 0
-	var flagged_count = 0
 	
+	if not mines_placed:
+		# If mines aren't placed yet, use the theoretical count
+		total_mines = int(tiles.size() * mine_percentage)
+	else:
+		for tile in tiles:
+			if tile.has_mine:
+				total_mines += 1
+	
+	var flagged_count = 0
 	for tile in tiles:
-		if tile.has_mine:
-			total_mines += 1
 		if tile.is_flagged:
 			flagged_count += 1
 	
@@ -607,6 +269,13 @@ func reveal_tile(tile):
 	if tile.is_revealed or tile.is_flagged:
 		return
 	
+	# First click safety: generate mines if not yet placed
+	if not mines_placed:
+		place_mines(tile.index)
+		calculate_neighbor_counts()
+		mines_placed = true
+		update_mine_counter()
+	
 	tile.is_revealed = true
 	
 	# Start timer on first tile reveal
@@ -615,8 +284,7 @@ func reveal_tile(tile):
 		game_paused = false
 	
 	# Play tile reveal sound
-	if tile_reveal_sound:
-		play_tile_reveal_sound()
+	audio_manager.play_reveal_sound()
 	
 	# Color mapping for neighboring mines (1-8)
 	var color_map = [
@@ -645,12 +313,10 @@ func reveal_tile(tile):
 		update_game_statistics() # Update stats for loss
 		
 		# Play mine explosion sound
-		if mine_explosion_sound:
-			play_mine_explosion_sound()
+		audio_manager.play_explosion_sound()
 		
 		# Play game lose sound
-		if game_lose_sound:
-			play_game_lose_sound()
+		audio_manager.play_lose_sound()
 		
 		reveal_all_mines()
 		ui.show_game_over("Game Over!")
@@ -753,8 +419,7 @@ func check_win_condition():
 	update_game_statistics() # Update stats for win
 	
 	# Play game win sound
-	if game_win_sound:
-		play_game_win_sound()
+	audio_manager.play_win_sound()
 	
 	ui.show_game_over("You Win!")
 	trigger_fireworks()
@@ -840,8 +505,7 @@ func reset_game():
 	# Reset timer
 	reset_timer()
 	generate_globe()
-	place_mines()
-	calculate_neighbor_counts()
+	mines_placed = false
 	update_mine_counter()
 
 # Statistics and timer functions

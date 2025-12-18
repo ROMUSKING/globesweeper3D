@@ -1,5 +1,7 @@
 extends Control
 
+signal game_reset_requested
+
 @onready var time_label = $HBoxContainer/TimeLabel
 @onready var mine_label = $HBoxContainer/MineLabel
 @onready var reset_button = $HBoxContainer/ResetButton
@@ -24,6 +26,4 @@ func hide_game_over():
 
 func _on_reset_button_pressed():
 	game_over_label.visible = false
-	var main_node = get_node("../")
-	if main_node.has_method("reset_game"):
-		main_node.reset_game()
+	game_reset_requested.emit()
