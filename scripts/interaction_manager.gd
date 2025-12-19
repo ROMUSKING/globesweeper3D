@@ -19,6 +19,17 @@ var _current_hovered_index: int = -1
 
 func _ready():
 	process_mode = Node.PROCESS_MODE_PAUSABLE
+	_set_input_processing(true) # Start with input processing enabled by default
+
+func set_input_processing(enable: bool):
+	_set_input_processing(enable)
+
+func _set_input_processing(enable: bool):
+	# Control whether this node processes input
+	if enable:
+		process_mode = Node.PROCESS_MODE_PAUSABLE
+	else:
+		process_mode = Node.PROCESS_MODE_DISABLED
 
 func _physics_process(_delta):
 	_update_hover()
@@ -39,7 +50,7 @@ func _update_hover():
 		_current_hovered_index = hit_index
 		tile_hovered.emit(hit_index)
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		_handle_mouse_button(event)
 	elif event is InputEventMouseMotion:

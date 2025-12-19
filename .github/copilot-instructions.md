@@ -9,7 +9,7 @@ GlobeSweeper 3D is a spherical Minesweeper game built in Godot 4.4.1. It uses an
 - **Interaction Management**: [scripts/interaction_manager.gd](scripts/interaction_manager.gd) handles raycasting and input events (mouse/touch). It uses `tile_index` metadata on `StaticBody3D` nodes to identify tiles and emits signals like `tile_clicked(index, button)`. Distinguishes drag (rotation) from click using `DRAG_THRESHOLD` (4.0).
 - **Audio Management**: [scripts/audio_manager.gd](scripts/audio_manager.gd) generates procedural sound effects using `AudioStreamGenerator`. No external audio files are used; samples are pushed via `push_frame()`. Separate streams for reveal, explosion, win/lose sounds.
 - **Tile Representation**: Tiles are instances of the `Tile` class ([scripts/tile.gd](scripts/tile.gd), inherits `RefCounted`). Each `Tile` object stores its state (mine, revealed, flagged) and a reference to its `StaticBody3D` node.
-- **UI Management**: [scripts/ui.gd](scripts/ui.gd) handles HUD updates. It communicates with `Main.gd` via **Signals** (e.g., `game_reset_requested`). Updates mine counter, timer, and game status.
+- **UI Management**: [scripts/ui/ui_manager.gd](scripts/ui/ui_manager.gd) handles UI state switching between Main Menu, HUD, and Game Over screens. It communicates with `Main.gd` via signals (e.g., `start_game_requested`, `restart_game_requested`, `menu_requested`). Manages sub-scenes: [scenes/ui/MainMenu.tscn](scenes/ui/MainMenu.tscn), [scenes/ui/HUD.tscn](scenes/ui/HUD.tscn), [scenes/ui/GameOver.tscn](scenes/ui/GameOver.tscn).
 
 ## Key Patterns & Conventions
 - **First-Click Safety**: Mines are NOT placed at start. `place_mines()` is called in `reveal_tile()` on the first click, excluding the clicked tile and its neighbors.
@@ -29,7 +29,7 @@ GlobeSweeper 3D is a spherical Minesweeper game built in Godot 4.4.1. It uses an
 - **Modifying Tiles**: Update `create_tile_at_position` or `generate_tile_mesh` in [scripts/globe_generator.gd](scripts/globe_generator.gd). Adjust `hex_radius` calculation for tile sizing.
 - **Adjusting Difficulty**: Modify `@export` variables in `Main.gd`: `globe_radius`, `subdivision_level`, and `mine_percentage`. Higher subdivision increases tile count exponentially.
 - **Audio Changes**: Modify `_setup_streams` or `play_*` functions in [scripts/audio_manager.gd](scripts/audio_manager.gd). Sounds use sine waves, noise, and envelopes pushed to `AudioStreamGenerator`.
-- **UI Updates**: Edit [scenes/ui.tscn](scenes/ui.tscn) and [scripts/ui.gd](scripts/ui.gd). Connect signals like `game_reset_requested` for new game button.
+- **UI Updates**: Edit [scenes/ui.tscn](scenes/ui.tscn) and [scripts/ui/ui_manager.gd](scripts/ui/ui_manager.gd). Connect signals like `start_game_requested` for new game button. Modify sub-scenes [scenes/ui/MainMenu.tscn](scenes/ui/MainMenu.tscn), [scenes/ui/HUD.tscn](scenes/ui/HUD.tscn), [scenes/ui/GameOver.tscn](scenes/ui/GameOver.tscn) for specific UI elements.
 - **Interaction Logic**: Modify `_update_hover` or `_handle_mouse_button` in [scripts/interaction_manager.gd](scripts/interaction_manager.gd). Raycast against `StaticBody3D` with `tile_index` meta.
 - **Shader Modifications**: Update [shaders/tile.gdshader](shaders/tile.gdshader) for visual effects. Use `u_state` to switch between hidden/revealed/flagged/mine appearances.
 

@@ -265,8 +265,8 @@ func _on_tile_clicked(index: int, button_index: int):
 	
 	if button_index == MOUSE_BUTTON_LEFT:
 		if tile.is_revealed and tile.neighbor_mines > 0:
-			# TODO: Restore chord functionality if needed
-			pass
+			# Chord functionality: click on revealed number to reveal neighbors
+			chord_reveal(tile)
 		else:
 			reveal_tile(tile)
 	elif button_index == MOUSE_BUTTON_RIGHT:
@@ -530,11 +530,11 @@ func change_state(new_state: GameState):
 	match current_state:
 		GameState.MENU:
 			ui.show_main_menu()
-			interaction_manager.set_process_input(false)
+			interaction_manager.set_input_processing(false)
 			cursor.visible = false
 		GameState.PLAYING:
 			ui.show_hud()
-			interaction_manager.set_process_input(true)
+			interaction_manager.set_input_processing(true)
 		GameState.GAME_OVER:
 			var is_win = false
 			# Determine if win or loss based on remaining unrevealed safe tiles
@@ -543,9 +543,9 @@ func change_state(new_state: GameState):
 				if not t.has_mine and not t.is_revealed:
 					unrevealed_safe += 1
 			is_win = (unrevealed_safe == 0)
-			
+				
 			ui.show_game_over(is_win)
-			interaction_manager.set_process_input(false)
+			interaction_manager.set_input_processing(false)
 			cursor.visible = false
 
 func _on_start_game_requested():
