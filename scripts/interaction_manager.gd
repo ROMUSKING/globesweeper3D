@@ -8,6 +8,10 @@ signal drag_ended
 signal drag_active(relative: Vector2)
 signal zoom_changed(amount: float)
 
+# Powerup activation signals
+signal powerup_activation_requested(powerup_type: String)
+signal powerup_hover_requested(index: int)
+
 # Configuration
 const DRAG_THRESHOLD: float = 4.0
 
@@ -49,8 +53,16 @@ func _update_hover():
 	if hit_index != _current_hovered_index:
 		_current_hovered_index = hit_index
 		tile_hovered.emit(hit_index)
+		
+		# Emit powerup hover signal for relevant powerups
+		if hit_index != -1:
+			powerup_hover_requested.emit(hit_index)
 
 func _input(event: InputEvent) -> void:
+	# Handle powerup activation keys
+	if event is InputEventKey and event.pressed and not event.echo:
+		_handle_powerup_key_input(event)
+	
 	if event is InputEventMouseButton:
 		_handle_mouse_button(event)
 	elif event is InputEventMouseMotion:
@@ -131,6 +143,24 @@ func _handle_touch_drag(event: InputEventScreenDrag) -> void:
 	
 	drag_active.emit(event.relative)
 
+func _handle_powerup_key_input(event: InputEventKey):
+	# Map number keys to powerup activations
+	match event.keycode:
+		KEY_1:
+			powerup_activation_requested.emit("reveal_protection")
+		KEY_2:
+			powerup_activation_requested.emit("reveal_mine")
+		KEY_3:
+			powerup_activation_requested.emit("reveal_safe_tile")
+		KEY_4:
+			powerup_activation_requested.emit("hint_system")
+		KEY_5:
+			powerup_activation_requested.emit("time_freeze")
+		KEY_H:
+			# Alternative hint activation with H key
+			if _current_hovered_index != -1:
+				powerup_hover_requested.emit(_current_hovered_index)
+
 func _perform_raycast(screen_pos: Vector2) -> Dictionary:
 	var camera = get_viewport().get_camera_3d()
 	if not camera:
@@ -150,4 +180,42 @@ func _get_tile_index_at(screen_pos: Vector2) -> int:
 	var result = _perform_raycast(screen_pos)
 	if result and result.collider and result.collider.has_meta("tile_index"):
 		return result.collider.get_meta("tile_index")
+	return -1
+
+# Powerup activation methods
+func request_powerup_activation(powerup_type: String, target_index: int = -1):
+	"""Public method to request powerup activation (can be called from UI)"""
+	if target_index != -1:
+		# Set temporary hover for targeted powerups
+		_current_hovered_index = target_index
+		powerup_hover_requested.emit(target_index)
+	
+	powerup_activation_requested.emit(powerup_type)
+
+func get_current_hovered_tile() -> int:
+	"""Returns the currently hovered tile index"""
+	return _current_hovered_index
+
+func is_input_processing_enabled() -> bool:
+	"""Returns whether input processing is currently enabled"""
+	return process_mode == Node.PROCESS_MODE_PAUSABLE
+
+func set_powerup_mode(enabled: bool):
+	"""Enables or disables powerup interaction mode"""
+	if enabled:
+		# In powerup mode, we might want different behavior
+		# For now, just log the mode change
+		print("Powerup mode enabled")
+	else:
+		print("Powerup mode disabled")
+
+# Utility methods for powerup integration
+func get_tile_at_position(screen_pos: Vector2) -> int:
+	"""Alternative method name for getting tile at screen position"""
+	return _get_tile_index_at(screen_pos)
+
+func get_hovered_tile_safe() -> int:
+	"""Safely get hovered tile index with bounds checking"""
+	if _current_hovered_index >= 0:
+		return _current_hovered_index
 	return -1

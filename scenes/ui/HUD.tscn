@@ -36,3 +36,219 @@ text = "Menu"
 [node name="ScoreLabel" type="Label" parent="TopBar/HBoxContainer"]
 layout_mode = 2
 text = "Score: 0"
+
+[node name="PowerupPanel" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -300.0
+offset_bottom = 300.0
+grow_horizontal = 0
+
+[node name="PowerupVBox" type="VBoxContainer" parent="PowerupPanel"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="PowerupHeader" type="Label" parent="PowerupPanel/PowerupVBox"]
+layout_mode = 2
+text = "Powerups"
+horizontal_alignment = 1
+
+[node name="PowerupScroll" type="ScrollContainer" parent="PowerupPanel/PowerupVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PowerupList" type="VBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RevealProtectionCard" type="PanelContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList"]
+layout_mode = 2
+
+[node name="RevealProtectionHBox" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RevealProtectionIcon" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox"]
+layout_mode = 2
+text = "🛡️"
+
+[node name="RevealProtectionInfo" type="VBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RevealProtectionName" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox/RevealProtectionInfo"]
+layout_mode = 2
+text = "Reveal Protection"
+
+[node name="RevealProtectionStatus" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox/RevealProtectionInfo"]
+layout_mode = 2
+text = "Owned: 0 | Available: 0"
+
+[node name="RevealProtectionButtons" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox"]
+layout_mode = 2
+
+[node name="RevealProtectionBuyButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox/RevealProtectionButtons"]
+layout_mode = 2
+text = "Buy (50)"
+
+[node name="RevealProtectionActivateButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox/RevealProtectionButtons"]
+layout_mode = 2
+text = "Activate"
+
+[node name="RevealProtectionCooldown" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox"]
+layout_mode = 2
+text = ""
+
+[node name="RevealMineCard" type="PanelContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList"]
+layout_mode = 2
+
+[node name="RevealMineHBox" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RevealMineIcon" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard/RevealMineHBox"]
+layout_mode = 2
+text = "💣"
+
+[node name="RevealMineInfo" type="VBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard/RevealMineHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RevealMineName" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard/RevealMineHBox/RevealMineInfo"]
+layout_mode = 2
+text = "Reveal Mine"
+
+[node name="RevealMineStatus" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard/RevealMineHBox/RevealMineInfo"]
+layout_mode = 2
+text = "Owned: 0 | Available: 0"
+
+[node name="RevealMineButtons" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard/RevealMineHBox"]
+layout_mode = 2
+
+[node name="RevealMineBuyButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard/RevealMineHBox/RevealMineButtons"]
+layout_mode = 2
+text = "Buy (75)"
+
+[node name="RevealMineActivateButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard/RevealMineHBox/RevealMineButtons"]
+layout_mode = 2
+text = "Activate"
+
+[node name="RevealMineCooldown" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealMineCard/RevealMineHBox"]
+layout_mode = 2
+text = ""
+
+[node name="RevealSafeTileCard" type="PanelContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList"]
+layout_mode = 2
+
+[node name="RevealSafeTileHBox" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="RevealSafeTileIcon" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard/RevealSafeTileHBox"]
+layout_mode = 2
+text = "✅"
+
+[node name="RevealSafeTileInfo" type="VBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard/RevealSafeTileHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="RevealSafeTileName" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard/RevealSafeTileHBox/RevealSafeTileInfo"]
+layout_mode = 2
+text = "Reveal Safe Tile"
+
+[node name="RevealSafeTileStatus" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard/RevealSafeTileHBox/RevealSafeTileInfo"]
+layout_mode = 2
+text = "Owned: 0 | Available: 0"
+
+[node name="RevealSafeTileButtons" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard/RevealSafeTileHBox"]
+layout_mode = 2
+
+[node name="RevealSafeTileBuyButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard/RevealSafeTileHBox/RevealSafeTileButtons"]
+layout_mode = 2
+text = "Buy (25)"
+
+[node name="RevealSafeTileActivateButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard/RevealSafeTileHBox/RevealSafeTileButtons"]
+layout_mode = 2
+text = "Activate"
+
+[node name="RevealSafeTileCooldown" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealSafeTileCard/RevealSafeTileHBox"]
+layout_mode = 2
+text = ""
+
+[node name="HintSystemCard" type="PanelContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList"]
+layout_mode = 2
+
+[node name="HintSystemHBox" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="HintSystemIcon" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard/HintSystemHBox"]
+layout_mode = 2
+text = "💡"
+
+[node name="HintSystemInfo" type="VBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard/HintSystemHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="HintSystemName" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard/HintSystemHBox/HintSystemInfo"]
+layout_mode = 2
+text = "Hint System"
+
+[node name="HintSystemStatus" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard/HintSystemHBox/HintSystemInfo"]
+layout_mode = 2
+text = "Owned: 0 | Available: 0"
+
+[node name="HintSystemButtons" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard/HintSystemHBox"]
+layout_mode = 2
+
+[node name="HintSystemBuyButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard/HintSystemHBox/HintSystemButtons"]
+layout_mode = 2
+text = "Buy (30)"
+
+[node name="HintSystemActivateButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard/HintSystemHBox/HintSystemButtons"]
+layout_mode = 2
+text = "Activate"
+
+[node name="HintSystemCooldown" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/HintSystemCard/HintSystemHBox"]
+layout_mode = 2
+text = ""
+
+[node name="TimeFreezeCard" type="PanelContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList"]
+layout_mode = 2
+
+[node name="TimeFreezeHBox" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard"]
+layout_mode = 2
+theme_override_constants/separation = 5
+
+[node name="TimeFreezeIcon" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard/TimeFreezeHBox"]
+layout_mode = 2
+text = "❄️"
+
+[node name="TimeFreezeInfo" type="VBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard/TimeFreezeHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="TimeFreezeName" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard/TimeFreezeHBox/TimeFreezeInfo"]
+layout_mode = 2
+text = "Time Freeze"
+
+[node name="TimeFreezeStatus" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard/TimeFreezeHBox/TimeFreezeInfo"]
+layout_mode = 2
+text = "Owned: 0 | Available: 0"
+
+[node name="TimeFreezeButtons" type="HBoxContainer" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard/TimeFreezeHBox"]
+layout_mode = 2
+
+[node name="TimeFreezeBuyButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard/TimeFreezeHBox/TimeFreezeButtons"]
+layout_mode = 2
+text = "Buy (100)"
+
+[node name="TimeFreezeActivateButton" type="Button" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard/TimeFreezeHBox/TimeFreezeButtons"]
+layout_mode = 2
+text = "Activate"
+
+[node name="TimeFreezeCooldown" type="Label" parent="PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/TimeFreezeCard/TimeFreezeHBox"]
+layout_mode = 2
+text = ""

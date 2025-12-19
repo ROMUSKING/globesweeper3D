@@ -176,3 +176,20 @@ func play_chord_sound():
 		var envelope = sin(t * PI / duration) * exp(-t * 5.0)
 		var sample = (sin(t * freq1 * 2 * PI) + sin(t * freq2 * 2 * PI) * 0.7) * envelope * 0.2
 		playback.push_frame(Vector2(sample, sample))
+
+func play_powerup_sound():
+	if not chord_player.stream:
+		return
+
+	chord_player.play()
+	var playback = chord_player.get_stream_playback()
+	var duration = 0.3
+	var samples = int(SAMPLE_RATE * duration)
+
+	# Create a magical powerup sound
+	for i in range(samples):
+		var t = float(i) / SAMPLE_RATE
+		var freq = 1200.0 + sin(t * 10.0) * 200.0 # Wobbling frequency
+		var envelope = sin(t * PI / duration) * exp(-t * 3.0)
+		var sample = sin(t * freq * 2 * PI) * envelope * 0.3
+		playback.push_frame(Vector2(sample, sample))

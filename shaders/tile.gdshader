@@ -10,12 +10,18 @@ uniform vec3 u_base_color : source_color = vec3(0.3, 0.3, 0.35); // Unrevealed
 uniform vec3 u_revealed_color : source_color = vec3(0.8, 0.8, 0.8); // Revealed (dynamic)
 uniform vec3 u_flag_color : source_color = vec3(1.0, 0.2, 0.2); // Flagged
 uniform vec3 u_mine_color : source_color = vec3(0.8, 0.1, 0.1); // Mine
+uniform vec3 u_powerup_mine_color : source_color = vec3(0.6, 0.3, 0.9); // Powerup revealed mine (purple)
+uniform vec3 u_hint_color : source_color = vec3(0.0, 1.0, 0.4); // Hint highlighted (bright green)
+uniform vec3 u_protected_color : source_color = vec3(0.4, 0.8, 1.0); // Protected mine (blue)
 
 // State
 // 0.0 = Hidden
 // 1.0 = Revealed
 // 2.0 = Flagged
 // 3.0 = Mine (Revealed)
+// 4.0 = Powerup Revealed Mine
+// 5.0 = Hint Highlighted
+// 6.0 = Protected Mine
 uniform float u_state = 0.0;
 
 void fragment() {
@@ -38,6 +44,21 @@ void fragment() {
         final_albedo = u_mine_color;
         final_roughness = 0.4;
         final_metallic = 0.5;
+    } else if (abs(u_state - 4.0) < 0.1) {
+        // Powerup Revealed Mine
+        final_albedo = u_powerup_mine_color;
+        final_roughness = 0.3;
+        final_metallic = 0.7;
+    } else if (abs(u_state - 5.0) < 0.1) {
+        // Hint Highlighted
+        final_albedo = u_hint_color;
+        final_roughness = 0.6;
+        final_metallic = 0.1;
+    } else if (abs(u_state - 6.0) < 0.1) {
+        // Protected Mine
+        final_albedo = u_protected_color;
+        final_roughness = 0.5;
+        final_metallic = 0.3;
     }
 
     // Rim Light (Fresnel)

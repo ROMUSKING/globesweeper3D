@@ -15,9 +15,11 @@ var tiles: Array = []
 const GlobeGeneratorScript = preload("res://scripts/globe_generator.gd")
 const AudioManagerScript = preload("res://scripts/audio_manager.gd")
 const InteractionManagerScript = preload("res://scripts/interaction_manager.gd")
+const PowerupManagerScript = preload("res://scripts/powerup_manager.gd")
 const CURSOR_SCENE = preload("res://scenes/cursor.tscn")
 var globe_generator
 var audio_manager
+var powerup_manager
 enum GameState {MENU, PLAYING, GAME_OVER}
 var current_state: GameState = GameState.MENU
 var ui_scene = preload("res://scenes/ui.tscn")
@@ -45,6 +47,11 @@ var safe_tiles_revealed: int = 0
 var total_safe_tiles: int = 0
 var flags_used: int = 0
 var correct_flags: int = 0
+
+# Powerup system variables
+var reveal_protection_count: int = 0
+var timer_frozen: bool = false
+var timer_freeze_remaining: float = 0.0
 
 # Input state
 var interaction_manager
@@ -98,6 +105,8 @@ func _ready():
 	ui.start_game_requested.connect(_on_start_game_requested)
 	ui.restart_game_requested.connect(reset_game)
 	ui.menu_requested.connect(_on_menu_requested)
+	# Connect difficulty selection signal
+	ui.difficulty_selected.connect(_on_difficulty_selected)
 	add_child(ui)
 	
 	globe_generator = GlobeGeneratorScript.new()
@@ -106,6 +115,13 @@ func _ready():
 	# Initialize audio manager
 	audio_manager = AudioManagerScript.new()
 	add_child(audio_manager)
+
+	# Initialize powerup manager
+	powerup_manager = PowerupManagerScript.new()
+	add_child(powerup_manager)
+	powerup_manager.set_main_script_reference(self)
+	powerup_manager.score_deducted.connect(_on_score_deducted)
+	powerup_manager.powerup_activated.connect(_on_powerup_activated)
 
 	# Initialize interaction manager
 	interaction_manager = InteractionManagerScript.new()
@@ -116,6 +132,9 @@ func _ready():
 	interaction_manager.drag_ended.connect(func(): is_dragging_globe = false)
 	interaction_manager.drag_active.connect(_on_globe_dragged)
 	interaction_manager.zoom_changed.connect(_on_zoom_changed)
+	# Connect powerup activation signals
+	interaction_manager.powerup_activation_requested.connect(_on_powerup_activation_requested)
+	interaction_manager.powerup_hover_requested.connect(_on_powerup_hover_requested)
 	
 	# Initialize cursor
 	cursor = CURSOR_SCENE.instantiate()
@@ -142,12 +161,25 @@ func _ready():
 func _process(delta):
 	if current_state == GameState.PLAYING:
 		if game_started:
-			game_timer += delta
+			# Handle timer freeze
+			if not timer_frozen:
+				game_timer += delta
+			else:
+				timer_freeze_remaining -= delta
+				if timer_freeze_remaining <= 0.0:
+					timer_frozen = false
+					timer_freeze_remaining = 0.0
+			
 			ui.update_time(format_time(game_timer))
 			
 			# Update score display
 			calculate_score()
 			ui.update_score(current_game_score)
+		
+		# Update powerup manager cooldowns
+		if powerup_manager:
+			powerup_manager.update_cooldowns(delta)
+		
 		update_mine_counter()
 	
 	# Update cursor position to follow rotating tile
@@ -293,7 +325,8 @@ func _on_tile_clicked(index: int, button_index: int):
 			# Chord functionality: click on revealed number to reveal neighbors
 			chord_reveal(tile)
 		else:
-			reveal_tile(tile)
+			# Use protection check for left clicks
+			reveal_tile_with_protection_check(tile)
 	elif button_index == MOUSE_BUTTON_RIGHT:
 		toggle_flag(tile)
 
@@ -642,6 +675,9 @@ func reset_game():
 	flags_used = 0
 	correct_flags = 0
 	
+	# Reset powerup state
+	reset_powerup_state()
+	
 	# Apply difficulty settings before generating globe
 	apply_difficulty_settings()
 	
@@ -679,6 +715,19 @@ func change_state(new_state: GameState):
 
 func _on_start_game_requested():
 	reset_game()
+
+# Handle difficulty selection from UI
+func _on_difficulty_selected(difficulty_level: int):
+	# Convert UI difficulty (0,1,2) to game difficulty enum
+	match difficulty_level:
+		0:
+			difficulty_level = DifficultyLevel.EASY
+		1:
+			difficulty_level = DifficultyLevel.MEDIUM
+		2:
+			difficulty_level = DifficultyLevel.HARD
+	# Apply the selected difficulty settings
+	apply_difficulty_settings()
 
 func _on_menu_requested():
 	# Clear globe or just stop processing
@@ -770,3 +819,197 @@ func _apply_reveal_visuals(tile):
 			var n = clamp(tile.neighbor_mines, 0, 8)
 			mat.set_shader_parameter("u_state", 1.0) # Revealed
 			mat.set_shader_parameter("u_revealed_color", NEIGHBOR_COLORS[n])
+
+# Powerup System Integration Methods
+
+# Powerup callback methods
+func _on_score_deducted(amount: int, reason: String):
+	# Visual feedback for score deduction
+	print("Score deducted: ", amount, " points for ", reason)
+	# TODO: Add UI feedback for score deduction
+
+func _on_powerup_activated(powerup_type: String):
+	print("Powerup activated: ", powerup_type)
+	# Add visual/audio feedback for powerup activation
+	audio_manager.play_powerup_sound()
+	# Additional powerup-specific effects can be added here
+
+# Powerup activation callback methods
+func _on_powerup_activation_requested(powerup_type: String):
+	print("Powerup activation requested: ", powerup_type)
+	if powerup_manager and powerup_manager.can_activate_powerup(powerup_type):
+		var result = powerup_manager.activate_powerup(powerup_type)
+		if result.success:
+			print("Powerup ", powerup_type, " activated successfully")
+		else:
+			print("Failed to activate powerup ", powerup_type, ": ", result.message)
+	else:
+		print("Cannot activate powerup ", powerup_type, " - not available or on cooldown")
+
+func _on_powerup_hover_requested(tile_index: int):
+	print("Powerup hover requested for tile index: ", tile_index)
+	# This could be used for hint system or targeted powerups
+	# For now, just update the hovered tile
+	hovered_tile_index = tile_index
+
+# Powerup integration methods called by PowerupManager
+func add_reveal_protection():
+	reveal_protection_count += 1
+	print("Reveal protection added. Total protections: ", reveal_protection_count)
+
+func reveal_random_mine() -> Dictionary:
+	# Find unrevealed mines
+	var unrevealed_mines = []
+	for i in range(tiles.size()):
+		var tile = tiles[i]
+		if tile.has_mine and not tile.is_revealed:
+			unrevealed_mines.append(i)
+	
+	if unrevealed_mines.is_empty():
+		return {"revealed": false, "message": "No unrevealed mines found"}
+	
+	# Randomly select a mine to reveal
+	var rng = RandomNumberGenerator.new()
+	rng.randomize()
+	var mine_index = unrevealed_mines[rng.randi_range(0, unrevealed_mines.size() - 1)]
+	var tile = tiles[mine_index]
+	
+	# Reveal the mine with special visual indication
+	tile.is_revealed = true
+	var mat = tile.mesh.material_override as ShaderMaterial
+	if mat:
+		mat.set_shader_parameter("u_state", 4.0) # Powerup revealed mine
+	add_number_to_tile(tile, "💣")
+	
+	print("Mine revealed at index: ", mine_index)
+	return {"revealed": true, "mine_index": mine_index, "position": tile.world_position}
+
+func reveal_random_safe_tile() -> Dictionary:
+	# Find unrevealed safe tiles
+	var unrevealed_safe_tiles = []
+	for i in range(tiles.size()):
+		var tile = tiles[i]
+		if not tile.has_mine and not tile.is_revealed:
+			unrevealed_safe_tiles.append(i)
+	
+	if unrevealed_safe_tiles.is_empty():
+		return {"revealed": false, "message": "No unrevealed safe tiles found"}
+	
+	# Randomly select a safe tile to reveal
+	var rng = RandomNumberGenerator.new()
+	rng.randomize()
+	var safe_index = unrevealed_safe_tiles[rng.randi_range(0, unrevealed_safe_tiles.size() - 1)]
+	var tile = tiles[safe_index]
+	
+	# Reveal the safe tile
+	reveal_tile(tile)
+	
+	print("Safe tile revealed at index: ", safe_index)
+	return {"revealed": true, "tile_index": safe_index, "position": tile.world_position, "neighbor_mines": tile.neighbor_mines}
+
+func show_hints() -> Dictionary:
+	# Show hints by temporarily highlighting safe tiles around hovered area
+	var hints_shown = 0
+	
+	if hovered_tile_index != -1 and hovered_tile_index < tiles.size():
+		var center_tile = tiles[hovered_tile_index]
+		var safe_tiles_in_area = []
+		
+		# Find safe tiles in the area around the hovered tile
+		for neighbor_idx in center_tile.neighbors:
+			var neighbor = tiles[neighbor_idx]
+			if not neighbor.has_mine and not neighbor.is_revealed:
+				safe_tiles_in_area.append(neighbor_idx)
+		
+		# Highlight safe tiles temporarily
+		for tile_idx in safe_tiles_in_area:
+			var tile = tiles[tile_idx]
+			var mat = tile.mesh.material_override as ShaderMaterial
+			if mat:
+				# Store original color
+				var original_color = mat.get_shader_parameter("u_revealed_color")
+				# Set hint color (bright green)
+				mat.set_shader_parameter("u_revealed_color", Color(0.0, 1.0, 0.0, 0.8))
+				mat.set_shader_parameter("u_state", 5.0) # Hint state
+				
+				# Remove hint after 3 seconds
+				var timer = get_tree().create_timer(3.0)
+				timer.timeout.connect(func():
+					if is_instance_valid(tile.mesh):
+						var hint_mat = tile.mesh.material_override as ShaderMaterial
+						if hint_mat:
+							hint_mat.set_shader_parameter("u_state", 0.0) # Back to unrevealed
+							hint_mat.set_shader_parameter("u_revealed_color", original_color)
+					)
+				
+				hints_shown += 1
+	
+	print("Hints shown for ", hints_shown, " tiles")
+	return {"hints_shown": hints_shown, "center_index": hovered_tile_index}
+
+func freeze_timer(duration: float):
+	timer_frozen = true
+	timer_freeze_remaining = duration
+	print("Timer frozen for ", duration, " seconds")
+	# TODO: Add visual indicator for frozen timer
+
+# Game integration methods
+func get_current_score() -> int:
+	return current_game_score
+
+func consume_reveal_protection() -> bool:
+	if reveal_protection_count > 0:
+		reveal_protection_count -= 1
+		return true
+	return false
+
+# Modified reveal_tile to integrate with reveal protection
+func reveal_tile_with_protection_check(tile):
+	if tile.has_mine and reveal_protection_count > 0:
+		# Use protection instead of game over
+		consume_reveal_protection()
+		print("Reveal protection used! Mine at index ", tile.index, " was protected.")
+		# Visual feedback for protection
+		var mat = tile.mesh.material_override as ShaderMaterial
+		if mat:
+			mat.set_shader_parameter("u_state", 6.0) # Protected mine state
+		add_number_to_tile(tile, "🛡️")
+	else:
+		reveal_tile(tile)
+
+# Additional powerup integration methods
+func activate_powerup_from_ui(powerup_type: String, target_index: int = -1):
+	"""Public method to activate powerups from UI"""
+	if powerup_manager and powerup_manager.can_activate_powerup(powerup_type):
+		var result = powerup_manager.activate_powerup(powerup_type)
+		if result.success:
+			print("Powerup ", powerup_type, " activated successfully from UI")
+			# Visual feedback
+			audio_manager.play_powerup_sound()
+			# Screen flash or other visual feedback could be added here
+		else:
+			print("Failed to activate powerup ", powerup_type, " from UI: ", result.message)
+			audio_manager.play_click_sound() # Error sound
+	else:
+		print("Cannot activate powerup ", powerup_type, " - not available or on cooldown")
+		audio_manager.play_click_sound() # Error sound
+
+func get_powerup_status_for_ui(powerup_type: String) -> Dictionary:
+	"""Returns powerup status for UI display"""
+	if powerup_manager:
+		return powerup_manager.get_powerup_status(powerup_type)
+	return {}
+
+func get_all_powerups_status_for_ui() -> Dictionary:
+	"""Returns all powerup statuses for UI display"""
+	if powerup_manager:
+		return powerup_manager.get_all_powerup_status()
+	return {}
+
+# Reset powerup state on new game
+func reset_powerup_state():
+	reveal_protection_count = 0
+	timer_frozen = false
+	timer_freeze_remaining = 0.0
+	if powerup_manager:
+		powerup_manager.reset_inventory()
