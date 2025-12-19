@@ -398,7 +398,15 @@ func chord_reveal(tile):
 	
 	# Add bonus points for successful chord reveals
 	if revealed_count > 0:
-		current_game_score += revealed_count * 10 * (1 + int(difficulty_level))
+		var difficulty_bonus = 1.0
+		match difficulty_level:
+			DifficultyLevel.EASY:
+				difficulty_bonus = 1.0
+			DifficultyLevel.MEDIUM:
+				difficulty_bonus = 1.5
+			DifficultyLevel.HARD:
+				difficulty_bonus = 2.0
+		current_game_score += int(revealed_count * 10 * difficulty_bonus)
 		
 	# Play chord reveal sound
 	audio_manager.play_chord_sound()
