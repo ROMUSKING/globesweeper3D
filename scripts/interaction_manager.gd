@@ -21,12 +21,19 @@ var _is_dragging: bool = false
 var _mouse_down_pos: Vector2 = Vector2.ZERO
 var _current_hovered_index: int = -1
 
+# Game State Manager reference
+var game_state_manager: Node = null
+
 func _ready():
 	process_mode = Node.PROCESS_MODE_PAUSABLE
 	_set_input_processing(true) # Start with input processing enabled by default
 
 func set_input_processing(enable: bool):
 	_set_input_processing(enable)
+
+func set_game_state_manager_reference(manager: Node):
+	"""Sets the Game State Manager reference for state-aware input handling"""
+	game_state_manager = manager
 
 func _set_input_processing(enable: bool):
 	# Control whether this node processes input
@@ -59,6 +66,10 @@ func _update_hover():
 			powerup_hover_requested.emit(hit_index)
 
 func _input(event: InputEvent) -> void:
+	# Check if we can process input based on game state
+	if game_state_manager and not game_state_manager.can_interact():
+		return
+	
 	# Handle powerup activation keys
 	if event is InputEventKey and event.pressed and not event.echo:
 		_handle_powerup_key_input(event)

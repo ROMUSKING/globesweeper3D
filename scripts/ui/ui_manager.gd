@@ -6,16 +6,27 @@ signal menu_requested
 signal difficulty_selected(difficulty_level: int)
 signal powerup_purchased_ui(powerup_type: String)
 signal powerup_activated_ui(powerup_type: String)
+signal pause_requested
+signal resume_requested
+signal settings_requested
+signal settings_closed
+signal difficulty_scaling_toggled(enabled: bool)
+signal difficulty_scaling_mode_changed(mode: int)
+signal difficulty_reset_requested
+signal difficulty_rollback_requested(steps: int)
 
 @onready var main_menu = $MainMenu
 @onready var hud = $HUD
 @onready var game_over = $GameOver
+@onready var pause_menu = $PauseMenu
+@onready var settings_menu = $SettingsMenu
 
 # HUD Elements
 @onready var time_label = $HUD/TopBar/HBoxContainer/TimeLabel
 @onready var mine_counter = $HUD/TopBar/HBoxContainer/MineCounter
 @onready var score_label = $HUD/TopBar/HBoxContainer/ScoreLabel
 @onready var menu_button = $HUD/TopBar/HBoxContainer/MenuButton
+@onready var difficulty_label = $HUD/TopBar/HBoxContainer/DifficultyLabel
 
 # Main Menu Elements
 @onready var start_button = $MainMenu/StartButton
@@ -31,8 +42,26 @@ signal powerup_activated_ui(powerup_type: String)
 @onready var restart_button = $GameOver/VBoxContainer/RestartButton
 @onready var main_menu_button = $GameOver/VBoxContainer/MainMenuButton
 
+# Pause Menu Elements
+@onready var pause_resume_button = $PauseMenu/VBoxContainer/ResumeButton
+@onready var pause_restart_button = $PauseMenu/VBoxContainer/RestartButton
+@onready var pause_menu_button = $PauseMenu/VBoxContainer/MenuButton
+@onready var pause_settings_button = $PauseMenu/VBoxContainer/SettingsButton
+
+# Settings Menu Elements
+@onready var settings_back_button = $SettingsMenu/VBoxContainer/BackButton
+@onready var scaling_toggle = $SettingsMenu/VBoxContainer/ScalingContainer/ScalingToggle
+@onready var scaling_mode_selector = $SettingsMenu/VBoxContainer/ScalingContainer/ScalingModeSelector
+@onready var reset_difficulty_button = $SettingsMenu/VBoxContainer/ScalingContainer/ResetDifficultyButton
+@onready var rollback_difficulty_button = $SettingsMenu/VBoxContainer/ScalingContainer/RollbackDifficultyButton
+@onready var scaling_status_label = $SettingsMenu/VBoxContainer/ScalingContainer/ScalingStatusLabel
+@onready var performance_metrics_label = $SettingsMenu/VBoxContainer/ScalingContainer/PerformanceMetricsLabel
+
 # Powerup UI Elements
 @onready var powerup_panel = $HUD/PowerupPanel
+
+# Game State Manager reference
+var game_state_manager: Node = null
 
 # Reveal Protection Elements
 @onready var reveal_protection_status = $HUD/PowerupPanel/PowerupVBox/PowerupScroll/PowerupList/RevealProtectionCard/RevealProtectionHBox/RevealProtectionInfo/RevealProtectionStatus
@@ -70,6 +99,9 @@ var selected_difficulty: int = 1 # Default to MEDIUM
 # Powerup Manager reference
 var powerup_manager: Node = null
 
+# Difficulty Scaling Manager reference
+var difficulty_scaling_manager: Node = null
+
 # Current game score
 var current_score: int = 0
 
@@ -88,6 +120,20 @@ func _ready():
 	if main_menu_button:
 		main_menu_button.pressed.connect(_on_main_menu_button_pressed)
 	
+	# Connect pause menu button signals
+	if pause_resume_button:
+		pause_resume_button.pressed.connect(_on_pause_resume_button_pressed)
+	if pause_restart_button:
+		pause_restart_button.pressed.connect(_on_pause_restart_button_pressed)
+	if pause_menu_button:
+		pause_menu_button.pressed.connect(_on_pause_menu_button_pressed)
+	if pause_settings_button:
+		pause_settings_button.pressed.connect(_on_pause_settings_button_pressed)
+	
+	# Connect settings menu button signals
+	if settings_back_button:
+		settings_back_button.pressed.connect(_on_settings_back_button_pressed)
+
 	# Connect difficulty button signals
 	if easy_button:
 		easy_button.pressed.connect(_on_easy_button_pressed)
@@ -109,21 +155,68 @@ func show_main_menu():
 	main_menu.visible = true
 	hud.visible = false
 	game_over.visible = false
+	pause_menu.visible = false
+	settings_menu.visible = false
 
 func show_hud():
 	main_menu.visible = false
 	hud.visible = true
 	game_over.visible = false
+	pause_menu.visible = false
+	settings_menu.visible = false
 
 func show_game_over(is_win: bool):
 	main_menu.visible = false
 	hud.visible = false
 	game_over.visible = true
+	pause_menu.visible = false
+	settings_menu.visible = false
 	
 	if is_win:
 		result_label.text = "You Win!"
 	else:
 		result_label.text = "Game Over"
+
+func show_pause_menu():
+	main_menu.visible = false
+	hud.visible = false
+	game_over.visible = false
+	pause_menu.visible = true
+	settings_menu.visible = false
+
+func show_settings_menu():
+	main_menu.visible = false
+	hud.visible = false
+	game_over.visible = false
+	pause_menu.visible = false
+	settings_menu.visible = true
+
+# Game State Manager integration
+func set_game_state_manager_reference(manager: Node):
+	"""Sets the Game State Manager reference for state-based UI updates"""
+	game_state_manager = manager
+	
+	# Connect to Game State Manager signals if available
+	if game_state_manager and game_state_manager.has_signal("state_changed"):
+		game_state_manager.state_changed.connect(_on_game_state_changed)
+	if game_state_manager and game_state_manager.has_signal("state_entered"):
+		game_state_manager.state_entered.connect(_on_game_state_entered)
+
+func _on_game_state_changed(from_state, to_state):
+	"""Handle game state changes from Game State Manager"""
+	match to_state:
+		game_state_manager.GameState.MENU:
+			show_main_menu()
+		game_state_manager.GameState.PLAYING:
+			show_hud()
+		game_state_manager.GameState.PAUSED:
+			show_pause_menu()
+		game_state_manager.GameState.GAME_OVER:
+			show_game_over(false)
+		game_state_manager.GameState.VICTORY:
+			show_game_over(true)
+		game_state_manager.GameState.SETTINGS:
+			show_settings_menu()
 
 func update_time(time_value):
 	# Assuming time_value is already formatted or we format it here
@@ -135,6 +228,11 @@ func update_mines(count):
 
 func update_score(score):
 	score_label.text = "Score: " + str(score)
+
+func update_difficulty_display(difficulty_level: float):
+	"""Update the difficulty display in HUD"""
+	if difficulty_label:
+		difficulty_label.text = "Difficulty: %.2fx" % difficulty_level
 
 # Signal Handlers
 func _on_start_button_pressed():
@@ -218,8 +316,12 @@ func initialize_powerup_ui():
 	# Set up hover effects for all buttons
 	setup_hover_effects()
 	
+	# Connect difficulty scaling signals
+	connect_difficulty_scaling_signals()
+	
 	# Initial UI update
 	update_powerup_ui()
+	update_difficulty_scaling_ui()
 
 func setup_hover_effects():
 	# Setup hover effects for buy buttons
@@ -274,6 +376,23 @@ func set_powerup_manager_reference(manager: Node):
 	
 	# Initial UI update
 	update_powerup_ui()
+
+func set_difficulty_scaling_manager_reference(manager: Node):
+	"""Sets the difficulty scaling manager reference for UI updates"""
+	difficulty_scaling_manager = manager
+	
+	# Connect difficulty scaling manager signals if available
+	if difficulty_scaling_manager and difficulty_scaling_manager.has_signal("difficulty_changed"):
+		difficulty_scaling_manager.difficulty_changed.connect(_on_difficulty_changed)
+	if difficulty_scaling_manager and difficulty_scaling_manager.has_signal("player_skill_assessed"):
+		difficulty_scaling_manager.player_skill_assessed.connect(_on_player_skill_assessed)
+	if difficulty_scaling_manager and difficulty_scaling_manager.has_signal("scaling_enabled"):
+		difficulty_scaling_manager.scaling_enabled.connect(_on_scaling_enabled)
+	if difficulty_scaling_manager and difficulty_scaling_manager.has_signal("scaling_disabled"):
+		difficulty_scaling_manager.scaling_disabled.connect(_on_scaling_disabled)
+	
+	# Initial UI update
+	update_difficulty_scaling_ui()
 
 func update_powerup_ui():
 	"""Updates all powerup UI elements based on current state"""
@@ -573,7 +692,148 @@ func refresh_powerup_ui():
 	"""Manually refreshes the powerup UI"""
 	update_powerup_ui()
 
+# Game State Manager Signal Handlers
+func _on_game_state_entered(state):
+	"""Handle entering a specific game state"""
+	print("UI: Entered game state: ", _state_to_string(state))
+
+func _state_to_string(state) -> String:
+	"""Convert state enum to string for debugging"""
+	if not game_state_manager:
+		return "UNKNOWN"
+	match state:
+		game_state_manager.GameState.MENU: return "MENU"
+		game_state_manager.GameState.PLAYING: return "PLAYING"
+		game_state_manager.GameState.PAUSED: return "PAUSED"
+		game_state_manager.GameState.GAME_OVER: return "GAME_OVER"
+		game_state_manager.GameState.VICTORY: return "VICTORY"
+		game_state_manager.GameState.SETTINGS: return "SETTINGS"
+		_: return "UNKNOWN"
+
+# Pause Menu Button Handlers
+func _on_pause_resume_button_pressed():
+	"""Resume game from pause"""
+	resume_requested.emit()
+
+func _on_pause_restart_button_pressed():
+	"""Restart game from pause menu"""
+	restart_game_requested.emit()
+
+func _on_pause_menu_button_pressed():
+	"""Return to main menu from pause"""
+	menu_requested.emit()
+
+func _on_pause_settings_button_pressed():
+	"""Open settings from pause menu"""
+	settings_requested.emit()
+
+func _on_settings_back_button_pressed():
+	"""Close settings menu"""
+	settings_closed.emit()
+
 # Test function for validating powerup UI functionality
+func connect_difficulty_scaling_signals():
+	"""Connect difficulty scaling UI signals"""
+	if scaling_toggle:
+		scaling_toggle.toggled.connect(_on_scaling_toggle_toggled)
+	if scaling_mode_selector:
+		scaling_mode_selector.item_selected.connect(_on_scaling_mode_selected)
+	if reset_difficulty_button:
+		reset_difficulty_button.pressed.connect(_on_reset_difficulty_pressed)
+	if rollback_difficulty_button:
+		rollback_difficulty_button.pressed.connect(_on_rollback_difficulty_pressed)
+
+func update_difficulty_scaling_ui():
+	"""Update difficulty scaling UI elements"""
+	if not difficulty_scaling_manager:
+		return
+	
+	var scaling_status = difficulty_scaling_manager.get_scaling_status()
+	
+	# Update scaling toggle
+	if scaling_toggle:
+		scaling_toggle.button_pressed = scaling_status.get("enabled", true)
+	
+	# Update scaling mode selector
+	if scaling_mode_selector:
+		var mode = scaling_status.get("mode", "ADAPTIVE")
+		var mode_index = 0
+		match mode:
+			"CONSERVATIVE": mode_index = 0
+			"AGGRESSIVE": mode_index = 1
+			"ADAPTIVE": mode_index = 2
+			"STATIC": mode_index = 3
+		scaling_mode_selector.select(mode_index)
+	
+	# Update scaling status display
+	if scaling_status_label:
+		var current_diff = scaling_status.get("current_difficulty", 1.0)
+		var min_diff = scaling_status.get("min_difficulty", 0.5)
+		var max_diff = scaling_status.get("max_difficulty", 2.0)
+		scaling_status_label.text = "Current: %.2fx (Range: %.2f-%.2f)" % [current_diff, min_diff, max_diff]
+	
+	# Update performance metrics display
+	if performance_metrics_label:
+		var metrics = scaling_status.get("metrics", {})
+		var efficiency = metrics.get("efficiency_score", 0.0)
+		var error_rate = metrics.get("error_rate", 0.0)
+		var powerup_dep = metrics.get("powerup_dependency", 0.0)
+		performance_metrics_label.text = "Efficiency: %.1f%% | Errors: %.1f%% | Powerup Dep: %.1f%%" % [efficiency * 100, error_rate * 100, powerup_dep * 100]
+
+# Difficulty Scaling Signal Handlers
+func _on_difficulty_changed(from_level: float, to_level: float, reason: String):
+	"""Handle difficulty changes"""
+	update_difficulty_display(to_level)
+	show_powerup_feedback("Difficulty: %.2fx → %.2fx (%s)" % [from_level, to_level, reason], Color.YELLOW, 3.0)
+
+func _on_player_skill_assessed(skill_level: float, confidence: float):
+	"""Handle player skill assessment"""
+	# Could show skill level in UI for advanced users
+	pass
+
+func _on_scaling_enabled():
+	"""Handle scaling being enabled"""
+	update_difficulty_scaling_ui()
+	show_powerup_feedback("Difficulty Scaling Enabled", Color.GREEN)
+
+func _on_scaling_disabled():
+	"""Handle scaling being disabled"""
+	update_difficulty_scaling_ui()
+	show_powerup_feedback("Difficulty Scaling Disabled", Color.ORANGE)
+
+# Difficulty Scaling Control Signal Handlers
+func _on_scaling_toggle_toggled(enabled: bool):
+	"""Handle scaling toggle"""
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.set_scaling_enabled(enabled)
+	difficulty_scaling_toggled.emit(enabled)
+
+func _on_scaling_mode_selected(mode_index: int):
+	"""Handle scaling mode selection"""
+	if difficulty_scaling_manager:
+		var mode_name = "ADAPTIVE"
+		match mode_index:
+			0: mode_name = "CONSERVATIVE"
+			1: mode_name = "AGGRESSIVE"
+			2: mode_name = "ADAPTIVE"
+			3: mode_name = "STATIC"
+		difficulty_scaling_manager.set_scaling_mode(mode_name)
+	difficulty_scaling_mode_changed.emit(mode_index)
+
+func _on_reset_difficulty_pressed():
+	"""Handle difficulty reset"""
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.reset_difficulty()
+	difficulty_reset_requested.emit()
+	show_powerup_feedback("Difficulty Reset to Default", Color.CYAN)
+
+func _on_rollback_difficulty_pressed():
+	"""Handle difficulty rollback"""
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.rollback_difficulty(1)
+	difficulty_rollback_requested.emit(1)
+	show_powerup_feedback("Difficulty Rolled Back", Color.PURPLE)
+
 func test_powerup_ui():
 	"""Test function to validate powerup UI components"""
 	print("=== POWERUP UI TEST RESULTS ===")
@@ -658,8 +918,12 @@ func test_powerup_ui():
 	var manager_connected = powerup_manager != null
 	print("Powerup manager connected: ", manager_connected)
 	
+	# Test difficulty scaling manager reference
+	var scaling_connected = difficulty_scaling_manager != null
+	print("Difficulty scaling manager connected: ", scaling_connected)
+	
 	# Overall test result
-	var all_tests_passed = hud_visible and panel_visible and buttons_working and status_labels_working and cooldown_labels_working
+	var all_tests_passed = hud_visible and panel_visible and buttons_working and status_labels_working and cooldown_labels_working and scaling_connected
 	print("\nOVERALL TEST RESULT: ", "PASSED" if all_tests_passed else "FAILED")
 	print("============================")
 	

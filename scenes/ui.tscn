@@ -1,9 +1,11 @@
-[gd_scene load_steps=5 format=3 uid="uid://bvk7w4xgtg7qj"]
+[gd_scene load_steps=7 format=3 uid="uid://bvk7w4xgtg7qj"]
 
 [ext_resource type="Script" uid="uid://dps0ivw067m0i" path="res://scripts/ui/ui_manager.gd" id="1_uimanager"]
 [ext_resource type="PackedScene" uid="uid://dmainmenu" path="res://scenes/ui/MainMenu.tscn" id="2_mainmenu"]
 [ext_resource type="PackedScene" uid="uid://dhud" path="res://scenes/ui/HUD.tscn" id="3_hud"]
 [ext_resource type="PackedScene" uid="uid://dgameover" path="res://scenes/ui/GameOver.tscn" id="4_gameover"]
+[ext_resource type="PackedScene" uid="uid://dpauesmenu" path="res://scenes/ui/PauseMenu.tscn" id="5_pausemenu"]
+[ext_resource type="PackedScene" uid="uid://dsettingsmenu" path="res://scenes/ui/SettingsMenu.tscn" id="6_settingsmenu"]
 
 [node name="UI" type="Control"]
 layout_mode = 3
@@ -22,5 +24,13 @@ visible = false
 layout_mode = 1
 
 [node name="GameOver" parent="." instance=ExtResource("4_gameover")]
+visible = false
+layout_mode = 1
+
+[node name="PauseMenu" parent="." instance=ExtResource("5_pausemenu")]
+visible = false
+layout_mode = 1
+
+[node name="SettingsMenu" parent="." instance=ExtResource("6_settingsmenu")]
 visible = false
 layout_mode = 1

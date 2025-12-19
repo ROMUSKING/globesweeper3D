@@ -53,6 +53,9 @@ var active_powerups: Dictionary = {}
 # Reference to main game script
 var main_script: Node = null
 
+# Reference to difficulty scaling manager
+var difficulty_scaling_manager: Node = null
+
 func _ready():
 	initialize_inventory()
 	initialize_cooldowns()
@@ -74,7 +77,7 @@ func can_purchase_powerup(powerup_type: String, available_score: int) -> bool:
 	if not POWERUP_DEFINITIONS.has(powerup_type):
 		return false
 		
-	var cost = POWERUP_DEFINITIONS[powerup_type]["cost"]
+	var cost = get_adjusted_powerup_cost(powerup_type)
 	return available_score >= cost
 
 func purchase_powerup(powerup_type: String, available_score: int) -> Dictionary:
@@ -96,7 +99,7 @@ func purchase_powerup(powerup_type: String, available_score: int) -> Dictionary:
 			"new_inventory": powerup_inventory.duplicate(true)
 		}
 	
-	var cost = POWERUP_DEFINITIONS[powerup_type]["cost"]
+	var cost = get_adjusted_powerup_cost(powerup_type)
 	var remaining_score = available_score - cost
 	
 	# Update inventory
@@ -106,6 +109,15 @@ func purchase_powerup(powerup_type: String, available_score: int) -> Dictionary:
 	# Emit signals
 	powerup_purchased.emit(powerup_type, cost)
 	score_deducted.emit(cost, "Powerup Purchase: " + POWERUP_DEFINITIONS[powerup_type]["name"])
+	
+	# Track powerup purchase for difficulty scaling
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.record_player_action("powerup_use", true, {
+			"type": powerup_type,
+			"action": "purchase",
+			"cost": cost,
+			"needed": remaining_score < cost * 0.5 # Consider "needed" if barely had enough score
+		})
 	
 	return {
 		"success": true,
@@ -168,6 +180,13 @@ func activate_powerup(powerup_type: String) -> Dictionary:
 	# Emit activation signal
 	powerup_activated.emit(powerup_type)
 	
+	# Track powerup activation for difficulty scaling
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.record_player_action("powerup_use", true, {
+			"type": powerup_type,
+			"action": "activate"
+		})
+	
 	# Execute powerup effect
 	var effect_data = execute_powerup_effect(powerup_type)
 	
@@ -200,6 +219,15 @@ func activate_reveal_protection() -> Dictionary:
 	# Add protection state to main script
 	if main_script and main_script.has_method("add_reveal_protection"):
 		main_script.add_reveal_protection()
+	
+	# Track powerup use for difficulty scaling
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.record_player_action("powerup_use", true, {
+			"type": "reveal_protection",
+			"action": "activate",
+			"needed": true # Protection is always "needed" when used
+		})
+	
 	return {"protection_count": 1}
 
 func activate_reveal_mine() -> Dictionary:
@@ -263,7 +291,8 @@ func get_powerup_status(powerup_type: String) -> Dictionary:
 	
 	return {
 		"name": definition["name"],
-		"cost": definition["cost"],
+		"cost": get_adjusted_powerup_cost(powerup_type),
+		"base_cost": definition["cost"],
 		"description": definition["description"],
 		"owned": inventory["owned"],
 		"available": inventory["available"],
@@ -309,6 +338,28 @@ func set_main_script_reference(script: Node):
 	Sets reference to main game script for powerup effects
 	"""
 	main_script = script
+
+func set_difficulty_scaling_manager_reference(manager: Node):
+	"""
+	Sets reference to difficulty scaling manager
+	"""
+	difficulty_scaling_manager = manager
+
+func get_adjusted_powerup_cost(powerup_type: String) -> int:
+	"""
+	Get powerup cost adjusted for difficulty scaling
+	"""
+	if not POWERUP_DEFINITIONS.has(powerup_type):
+		return 0
+	
+	var base_cost = POWERUP_DEFINITIONS[powerup_type]["cost"]
+	
+	# Get difficulty-based cost multiplier
+	var cost_multiplier = 1.0
+	if difficulty_scaling_manager and difficulty_scaling_manager.has_method("get_powerup_cost_multiplier"):
+		cost_multiplier = difficulty_scaling_manager.get_powerup_cost_multiplier()
+	
+	return int(base_cost * cost_multiplier)
 
 # Utility functions for powerup integration
 func is_protection_active() -> bool:

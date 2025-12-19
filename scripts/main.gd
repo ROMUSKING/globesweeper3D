@@ -16,12 +16,14 @@ const GlobeGeneratorScript = preload("res://scripts/globe_generator.gd")
 const AudioManagerScript = preload("res://scripts/audio_manager.gd")
 const InteractionManagerScript = preload("res://scripts/interaction_manager.gd")
 const PowerupManagerScript = preload("res://scripts/powerup_manager.gd")
+const GameStateManagerScript = preload("res://scripts/game_state_manager.gd")
+const DifficultyScalingManagerScript = preload("res://scripts/difficulty_scaling_manager.gd")
 const CURSOR_SCENE = preload("res://scenes/cursor.tscn")
 var globe_generator
 var audio_manager
 var powerup_manager
-enum GameState {MENU, PLAYING, GAME_OVER}
-var current_state: GameState = GameState.MENU
+var game_state_manager
+var difficulty_scaling_manager
 var ui_scene = preload("res://scenes/ui.tscn")
 var ui
 
@@ -101,13 +103,29 @@ var performance_stats = {
 
 func _ready():
 	setup_materials()
+	
+	# Initialize Game State Manager first
+	game_state_manager = GameStateManagerScript.new()
+	add_child(game_state_manager)
+	game_state_manager.state_changed.connect(_on_game_state_changed)
+	game_state_manager.state_entered.connect(_on_game_state_entered)
+	game_state_manager.game_paused.connect(_on_game_paused)
+	game_state_manager.game_resumed.connect(_on_game_resumed)
+	game_state_manager.main_menu_requested.connect(_on_main_menu_requested)
+	
 	ui = ui_scene.instantiate()
 	ui.start_game_requested.connect(_on_start_game_requested)
 	ui.restart_game_requested.connect(reset_game)
 	ui.menu_requested.connect(_on_menu_requested)
-	# Connect difficulty selection signal
 	ui.difficulty_selected.connect(_on_difficulty_selected)
+	ui.pause_requested.connect(_on_pause_requested)
+	ui.resume_requested.connect(_on_resume_requested)
+	ui.settings_requested.connect(_on_settings_requested)
+	ui.settings_closed.connect(_on_settings_closed)
 	add_child(ui)
+	
+	# Connect UI to Game State Manager
+	ui.set_game_state_manager_reference(game_state_manager)
 	
 	globe_generator = GlobeGeneratorScript.new()
 	add_child(globe_generator)
@@ -120,8 +138,18 @@ func _ready():
 	powerup_manager = PowerupManagerScript.new()
 	add_child(powerup_manager)
 	powerup_manager.set_main_script_reference(self)
+	powerup_manager.set_difficulty_scaling_manager_reference(difficulty_scaling_manager)
 	powerup_manager.score_deducted.connect(_on_score_deducted)
 	powerup_manager.powerup_activated.connect(_on_powerup_activated)
+
+	# Initialize difficulty scaling manager
+	difficulty_scaling_manager = DifficultyScalingManagerScript.new()
+	add_child(difficulty_scaling_manager)
+	difficulty_scaling_manager.set_main_script_reference(self)
+	difficulty_scaling_manager.set_powerup_manager_reference(powerup_manager)
+	difficulty_scaling_manager.set_game_state_manager_reference(game_state_manager)
+	difficulty_scaling_manager.difficulty_changed.connect(_on_difficulty_changed)
+	difficulty_scaling_manager.player_skill_assessed.connect(_on_player_skill_assessed)
 
 	# Initialize interaction manager
 	interaction_manager = InteractionManagerScript.new()
@@ -135,6 +163,12 @@ func _ready():
 	# Connect powerup activation signals
 	interaction_manager.powerup_activation_requested.connect(_on_powerup_activation_requested)
 	interaction_manager.powerup_hover_requested.connect(_on_powerup_hover_requested)
+	
+	# Connect interaction manager to Game State Manager
+	interaction_manager.set_game_state_manager_reference(game_state_manager)
+
+	# Connect UI to difficulty scaling manager
+	ui.set_difficulty_scaling_manager_reference(difficulty_scaling_manager)
 	
 	# Initialize cursor
 	cursor = CURSOR_SCENE.instantiate()
@@ -159,9 +193,9 @@ func _ready():
 	load_game_statistics()
 
 func _process(delta):
-	if current_state == GameState.PLAYING:
+	if game_state_manager.is_playing():
 		if game_started:
-			# Handle timer freeze
+			# Handle timer freeze - timer only advances when not frozen and not paused
 			if not timer_frozen:
 				game_timer += delta
 			else:
@@ -181,6 +215,11 @@ func _process(delta):
 			powerup_manager.update_cooldowns(delta)
 		
 		update_mine_counter()
+	elif game_state_manager.is_paused():
+		# Update powerup manager cooldowns even when paused
+		if powerup_manager:
+			powerup_manager.update_cooldowns(delta)
+		# Timer doesn't advance when paused
 	
 	# Update cursor position to follow rotating tile
 	if hovered_tile_index != -1 and hovered_tile_index < tiles.size():
@@ -197,7 +236,7 @@ func _process(delta):
 
 func _process_camera_feel(delta):
 	# Auto-rotate in menu
-	if current_state == GameState.MENU:
+	if game_state_manager.is_state(game_state_manager.GameState.MENU):
 		$Globe.rotate_y(0.1 * delta)
 		
 	# Apply rotation momentum only when not dragging
@@ -301,10 +340,13 @@ func update_mine_counter():
 	ui.update_mines(total_mines - flagged_count)
 
 func _input(event):
-	# Handle debug keys
+	# Handle debug keys and pause
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_F12:
 			print_performance_report()
+		elif event.keycode == KEY_ESCAPE:
+			# Toggle pause state
+			game_state_manager.toggle_pause()
 
 func _on_tile_hovered(index: int):
 	hovered_tile_index = index
@@ -315,7 +357,7 @@ func _on_tile_hovered(index: int):
 		cursor.visible = false
 
 func _on_tile_clicked(index: int, button_index: int):
-	if current_state != GameState.PLAYING:
+	if not game_state_manager.can_interact():
 		return
 		
 	var tile = tiles[index]
@@ -323,12 +365,15 @@ func _on_tile_clicked(index: int, button_index: int):
 	if button_index == MOUSE_BUTTON_LEFT:
 		if tile.is_revealed and tile.neighbor_mines > 0:
 			# Chord functionality: click on revealed number to reveal neighbors
-			chord_reveal(tile)
+			var chord_success = chord_reveal(tile)
+			track_player_action("chord", chord_success, {"tiles_revealed": chord_success})
 		else:
 			# Use protection check for left clicks
-			reveal_tile_with_protection_check(tile)
+			var reveal_success = reveal_tile_with_protection_check(tile)
+			track_player_action("reveal", reveal_success, {"tile_index": index})
 	elif button_index == MOUSE_BUTTON_RIGHT:
-		toggle_flag(tile)
+		var flag_success = toggle_flag(tile)
+		track_player_action("flag", flag_success, {"tile_index": index})
 
 func _on_globe_dragged(relative: Vector2):
 	# Direct manipulation
@@ -381,6 +426,10 @@ func reveal_tile(tile):
 		# Game over
 		update_game_statistics(false) # Update stats for loss
 		
+		# Record game end for difficulty scaling
+		if difficulty_scaling_manager:
+			difficulty_scaling_manager.record_game_end(false, game_timer, current_game_score)
+		
 		# Trigger screen shake
 		shake_strength = 2.5
 		
@@ -391,7 +440,7 @@ func reveal_tile(tile):
 		audio_manager.play_lose_sound()
 		
 		reveal_all_mines()
-		change_state(GameState.GAME_OVER)
+		game_state_manager.end_game(false)
 		return
 	
 	# Show number if has neighboring mines
@@ -406,21 +455,22 @@ func reveal_tile(tile):
 	
 	check_win_condition()
 
-func chord_reveal(tile):
+func chord_reveal(tile) -> bool:
+	"""Returns true if chord reveal was successful"""
 	# Only proceed if the tile is already revealed and has a number
 	if not tile.is_revealed or tile.neighbor_mines <= 0:
-		return
-	
+		return false
+
 	# Count flags around
 	var flag_count = 0
 	for neighbor_idx in tile.neighbors:
 		if tiles[neighbor_idx].is_flagged:
 			flag_count += 1
-	
+
 	# Only chord when placed flags equal the number
 	if flag_count != tile.neighbor_mines:
-		return
-	
+		return false
+
 	# Reveal all unflagged, unrevealed neighbors
 	var revealed_count = 0
 	for neighbor_idx in tile.neighbors:
@@ -428,7 +478,7 @@ func chord_reveal(tile):
 		if not n.is_flagged and not n.is_revealed:
 			reveal_tile(n)
 			revealed_count += 1
-	
+
 	# Add bonus points for successful chord reveals
 	if revealed_count > 0:
 		var difficulty_bonus = 1.0
@@ -443,10 +493,13 @@ func chord_reveal(tile):
 		
 	# Play chord reveal sound
 	audio_manager.play_chord_sound()
+	
+	return revealed_count > 0 # Success if any tiles were revealed
 
-func toggle_flag(tile):
+func toggle_flag(tile) -> bool:
+	"""Returns true if flag action was successful"""
 	if tile.is_revealed:
-		return
+		return false
 		
 	tile.is_flagged = not tile.is_flagged
 		
@@ -471,6 +524,9 @@ func toggle_flag(tile):
 	tween.tween_property(mesh, "scale", Vector3.ONE, 0.1)
 		
 	update_mine_counter()
+	
+	# Return success based on whether flag placement was correct
+	return (tile.is_flagged and tile.has_mine) or (not tile.is_flagged and not tile.has_mine)
 
 func add_number_to_tile(tile, text: String):
 	# Remove existing label
@@ -525,10 +581,14 @@ func check_win_condition():
 	# All safe tiles revealed
 	update_game_statistics(true) # Update stats for win
 	
+	# Record game end for difficulty scaling
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.record_game_end(true, game_timer, current_game_score)
+	
 	# Play game win sound
 	audio_manager.play_win_sound()
 	
-	change_state(GameState.GAME_OVER)
+	game_state_manager.end_game(true)
 	trigger_fireworks()
 
 func trigger_fireworks():
@@ -688,30 +748,65 @@ func reset_game():
 	
 	mines_placed = false
 	update_mine_counter()
-	change_state(GameState.PLAYING)
+	game_state_manager.start_game()
 
-func change_state(new_state: GameState):
-	current_state = new_state
-	match current_state:
-		GameState.MENU:
+# Game State Manager Signal Handlers
+func _on_game_state_changed(from_state, to_state):
+	"""Handle state changes from the Game State Manager"""
+	print("Game state changed from ", _state_to_string(from_state), " to ", _state_to_string(to_state))
+	
+	# Update UI and systems based on new state
+	match to_state:
+		game_state_manager.GameState.MENU:
 			ui.show_main_menu()
 			interaction_manager.set_input_processing(false)
 			cursor.visible = false
-		GameState.PLAYING:
+		game_state_manager.GameState.PLAYING:
 			ui.show_hud()
 			interaction_manager.set_input_processing(true)
-		GameState.GAME_OVER:
-			var is_win = false
-			# Determine if win or loss based on remaining unrevealed safe tiles
-			var unrevealed_safe = 0
-			for t in tiles:
-				if not t.has_mine and not t.is_revealed:
-					unrevealed_safe += 1
-			is_win = (unrevealed_safe == 0)
-				
+		game_state_manager.GameState.PAUSED:
+			# Pause menu will be shown by UI system
+			interaction_manager.set_input_processing(false)
+		game_state_manager.GameState.GAME_OVER, game_state_manager.GameState.VICTORY:
+			var is_win = (to_state == game_state_manager.GameState.VICTORY)
 			ui.show_game_over(is_win)
 			interaction_manager.set_input_processing(false)
 			cursor.visible = false
+		game_state_manager.GameState.SETTINGS:
+			# Settings menu will be shown by UI system
+			interaction_manager.set_input_processing(false)
+
+func _on_game_state_entered(state):
+	"""Handle entering a specific state"""
+	print("Entered game state: ", _state_to_string(state))
+
+func _on_game_paused():
+	"""Handle game pause"""
+	print("Game paused")
+	# Pause timer is handled in _process by checking is_paused()
+
+func _on_game_resumed():
+	"""Handle game resume"""
+	print("Game resumed")
+
+func _on_main_menu_requested():
+	"""Handle main menu request"""
+	# Clear globe
+	for child in $Globe.get_children():
+		child.queue_free()
+	tiles.clear()
+	update_mine_counter()
+
+func _state_to_string(state) -> String:
+	"""Convert state enum to string for debugging"""
+	match state:
+		game_state_manager.GameState.MENU: return "MENU"
+		game_state_manager.GameState.PLAYING: return "PLAYING"
+		game_state_manager.GameState.PAUSED: return "PAUSED"
+		game_state_manager.GameState.GAME_OVER: return "GAME_OVER"
+		game_state_manager.GameState.VICTORY: return "VICTORY"
+		game_state_manager.GameState.SETTINGS: return "SETTINGS"
+		_: return "UNKNOWN"
 
 func _on_start_game_requested():
 	reset_game()
@@ -729,12 +824,29 @@ func _on_difficulty_selected(difficulty_level: int):
 	# Apply the selected difficulty settings
 	apply_difficulty_settings()
 
+# Game State Manager UI Signal Handlers
+func _on_pause_requested():
+	"""Handle pause request from UI"""
+	game_state_manager.pause_game()
+
+func _on_resume_requested():
+	"""Handle resume request from UI"""
+	game_state_manager.resume_game()
+
+func _on_settings_requested():
+	"""Handle settings request from UI"""
+	game_state_manager.open_settings()
+
+func _on_settings_closed():
+	"""Handle settings closed from UI"""
+	game_state_manager.close_settings()
+
 func _on_menu_requested():
 	# Clear globe or just stop processing
 	for child in $Globe.get_children():
 		child.queue_free()
 	tiles.clear()
-	change_state(GameState.MENU)
+	game_state_manager.return_to_menu()
 	update_mine_counter()
 
 # Statistics and timer functions
@@ -852,6 +964,50 @@ func _on_powerup_hover_requested(tile_index: int):
 	# For now, just update the hovered tile
 	hovered_tile_index = tile_index
 
+# Difficulty Scaling Manager Signal Handlers
+func _on_difficulty_changed(from_level: float, to_level: float, reason: String):
+	"""Handle difficulty changes from the scaling manager"""
+	print("Difficulty changed from %.2f to %.2f: %s" % [from_level, to_level, reason])
+	
+	# Apply new difficulty parameters
+	apply_difficulty_scaling_parameters()
+	
+	# Update UI to reflect new difficulty
+	if ui:
+		ui.update_difficulty_display(to_level)
+
+func _on_player_skill_assessed(skill_level: float, confidence: float):
+	"""Handle player skill assessment from the scaling manager"""
+	print("Player skill assessed: %.2f (confidence: %.2f)" % [skill_level, confidence])
+
+# Difficulty Scaling Integration Methods
+func apply_difficulty_scaling_parameters():
+	"""Apply difficulty scaling parameters to game"""
+	if not difficulty_scaling_manager:
+		return
+	
+	var scaled_params = difficulty_scaling_manager.get_scaled_parameters()
+	
+	# Update game parameters based on scaling
+	mine_percentage = scaled_params.mine_density
+	subdivision_level = scaled_params.subdivision_level
+	
+	# Update camera zoom based on new subdivision level
+	target_zoom = globe_radius * 3
+	current_zoom = target_zoom
+	$Camera3D.position = Vector3(0, 0, current_zoom)
+
+func track_player_action(action_type: String, success: bool = true, data: Dictionary = {}):
+	"""Track player actions for difficulty scaling analysis"""
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.record_player_action(action_type, success, data)
+
+func get_difficulty_scaling_status() -> Dictionary:
+	"""Get current difficulty scaling status"""
+	if difficulty_scaling_manager:
+		return difficulty_scaling_manager.get_scaling_status()
+	return {}
+
 # Powerup integration methods called by PowerupManager
 func add_reveal_protection():
 	reveal_protection_count += 1
@@ -964,7 +1120,8 @@ func consume_reveal_protection() -> bool:
 	return false
 
 # Modified reveal_tile to integrate with reveal protection
-func reveal_tile_with_protection_check(tile):
+func reveal_tile_with_protection_check(tile) -> bool:
+	"""Returns true if reveal was successful, false if it was a mine"""
 	if tile.has_mine and reveal_protection_count > 0:
 		# Use protection instead of game over
 		consume_reveal_protection()
@@ -974,8 +1131,10 @@ func reveal_tile_with_protection_check(tile):
 		if mat:
 			mat.set_shader_parameter("u_state", 6.0) # Protected mine state
 		add_number_to_tile(tile, "🛡️")
+		return true # Protected reveals are considered successful
 	else:
 		reveal_tile(tile)
+		return not tile.has_mine # Return true if safe tile, false if mine
 
 # Additional powerup integration methods
 func activate_powerup_from_ui(powerup_type: String, target_index: int = -1):
@@ -1005,6 +1164,10 @@ func get_all_powerups_status_for_ui() -> Dictionary:
 	if powerup_manager:
 		return powerup_manager.get_all_powerup_status()
 	return {}
+
+func get_difficulty_scaling_manager() -> Node:
+	"""Get reference to difficulty scaling manager for UI"""
+	return difficulty_scaling_manager
 
 # Reset powerup state on new game
 func reset_powerup_state():
