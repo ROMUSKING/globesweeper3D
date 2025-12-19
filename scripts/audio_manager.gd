@@ -7,6 +7,7 @@ var explosion_player: AudioStreamPlayer
 var win_player: AudioStreamPlayer
 var lose_player: AudioStreamPlayer
 var click_player: AudioStreamPlayer
+var chord_player: AudioStreamPlayer
 
 # Constants
 const SAMPLE_RATE = 22050
@@ -22,6 +23,7 @@ func _setup_audio_nodes():
 	win_player = _create_player("WinSound")
 	lose_player = _create_player("LoseSound")
 	click_player = _create_player("ClickSound")
+	chord_player = _create_player("ChordSound")
 
 func _create_player(node_name: String) -> AudioStreamPlayer:
 	var player = AudioStreamPlayer.new()
@@ -59,6 +61,12 @@ func _setup_streams():
 	click_stream.mix_rate = SAMPLE_RATE
 	click_stream.buffer_length = 0.05
 	click_player.stream = click_stream
+	
+	# Chord sound
+	var chord_stream = AudioStreamGenerator.new()
+	chord_stream.mix_rate = SAMPLE_RATE
+	chord_stream.buffer_length = 0.2
+	chord_player.stream = chord_stream
 
 	# Background music (Placeholder based on original code)
 	var bg_stream = AudioStreamGenerator.new()
@@ -149,4 +157,22 @@ func play_click_sound():
 		var freq = 2000.0 # High pitch click
 		var envelope = exp(-t * 100.0)
 		var sample = sin(t * freq * 2 * PI) * envelope * 0.1
+		playback.push_frame(Vector2(sample, sample))
+
+func play_chord_sound():
+	if not chord_player.stream:
+		return
+
+	chord_player.play()
+	var playback = chord_player.get_stream_playback()
+	var duration = 0.2
+	var samples = int(SAMPLE_RATE * duration)
+
+	# Create a pleasant chord sound
+	for i in range(samples):
+		var t = float(i) / SAMPLE_RATE
+		var freq1 = 800.0 # Base frequency
+		var freq2 = 1200.0 # Higher harmonic
+		var envelope = sin(t * PI / duration) * exp(-t * 5.0)
+		var sample = (sin(t * freq1 * 2 * PI) + sin(t * freq2 * 2 * PI) * 0.7) * envelope * 0.2
 		playback.push_frame(Vector2(sample, sample))

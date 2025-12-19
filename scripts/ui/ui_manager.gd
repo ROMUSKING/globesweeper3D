@@ -11,6 +11,7 @@ signal menu_requested
 # HUD Elements
 @onready var time_label = $HUD/TopBar/HBoxContainer/TimeLabel
 @onready var mine_counter = $HUD/TopBar/HBoxContainer/MineCounter
+@onready var score_label = $HUD/TopBar/HBoxContainer/ScoreLabel
 @onready var menu_button = $HUD/TopBar/HBoxContainer/MenuButton
 
 # Main Menu Elements
@@ -64,6 +65,9 @@ func update_time(time_value):
 
 func update_mines(count):
 	mine_counter.text = "Mines: " + str(count)
+
+func update_score(score):
+	score_label.text = "Score: " + str(score)
 
 # Signal Handlers
 func _on_start_button_pressed():

@@ -1,6 +1,11 @@
 extends Node3D
 
 # Globe Minesweeper - Clean Implementation
+# Difficulty settings
+enum DifficultyLevel {EASY, MEDIUM, HARD}
+@export var difficulty_level: DifficultyLevel = DifficultyLevel.MEDIUM
+
+# Game parameters that will be adjusted based on difficulty
 @export var globe_radius: float = 20.0
 @export var subdivision_level: int = 3
 @export var mine_percentage: float = 0.15
@@ -28,8 +33,18 @@ var game_statistics = {
 	"best_time": 9999.0,
 	"total_time": 0.0,
 	"current_streak": 0,
-	"best_streak": 0
+	"best_streak": 0,
+	"high_score": 0,
+	"best_efficiency": 0.0,
+	"best_streak_score": 0
 }
+
+# Current game scoring variables
+var current_game_score: int = 0
+var safe_tiles_revealed: int = 0
+var total_safe_tiles: int = 0
+var flags_used: int = 0
+var correct_flags: int = 0
 
 # Input state
 var interaction_manager
@@ -118,6 +133,9 @@ func _ready():
 	current_zoom = target_zoom
 	$Camera3D.position = Vector3(0, 0, current_zoom)
 	
+	# Apply difficulty settings
+	apply_difficulty_settings()
+	
 	# Start game
 	load_game_statistics()
 
@@ -126,6 +144,10 @@ func _process(delta):
 		if game_started:
 			game_timer += delta
 			ui.update_time(format_time(game_timer))
+			
+			# Update score display
+			calculate_score()
+			ui.update_score(current_game_score)
 		update_mine_counter()
 	
 	# Update cursor position to follow rotating tile
@@ -202,9 +224,12 @@ func place_mines(excluded_tile_index: int = -1):
 	var excluded_indices = {}
 	if excluded_tile_index != -1:
 		excluded_indices[excluded_tile_index] = true
-		# Also exclude neighbors for a safe start area
+		# Enhanced safe-start guarantee: exclude a larger area around the first click
 		for neighbor_idx in tiles[excluded_tile_index].neighbors:
 			excluded_indices[neighbor_idx] = true
+			# Also exclude neighbors of neighbors for better safe start
+			for second_level_neighbor_idx in tiles[neighbor_idx].neighbors:
+				excluded_indices[second_level_neighbor_idx] = true
 	
 	for i in range(tiles.size()):
 		if not i in excluded_indices:
@@ -289,23 +314,27 @@ func _on_zoom_changed(amount: float):
 func reveal_tile(tile):
 	if tile.is_revealed or tile.is_flagged:
 		return
-	
+		
 	# First click safety: generate mines if not yet placed
 	if not mines_placed:
 		place_mines(tile.index)
 		calculate_neighbor_counts()
 		mines_placed = true
 		update_mine_counter()
-	
+		
 	tile.is_revealed = true
-	
+		
+	# Track safe tiles revealed for scoring
+	if not tile.has_mine:
+		safe_tiles_revealed += 1
+		
 	# Start timer on first tile reveal
 	if not game_started:
 		game_started = true
-	
+		
 	# Play tile reveal sound
 	audio_manager.play_reveal_sound()
-	
+		
 	# Animate reveal if it's a safe tile
 	if not tile.has_mine:
 		var mesh = tile.mesh
@@ -314,7 +343,7 @@ func reveal_tile(tile):
 		tween.tween_callback(func(): _apply_reveal_visuals(tile))
 		tween.tween_property(mesh, "scale", Vector3(1, 1.1, 1), 0.1)
 		tween.tween_property(mesh, "scale", Vector3.ONE, 0.1)
-	
+		
 	if tile.has_mine:
 		# Game over
 		update_game_statistics(false) # Update stats for loss
@@ -348,39 +377,58 @@ func chord_reveal(tile):
 	# Only proceed if the tile is already revealed and has a number
 	if not tile.is_revealed or tile.neighbor_mines <= 0:
 		return
+	
 	# Count flags around
-	var flag_count := 0
+	var flag_count = 0
 	for neighbor_idx in tile.neighbors:
 		if tiles[neighbor_idx].is_flagged:
 			flag_count += 1
+	
 	# Only chord when placed flags equal the number
 	if flag_count != tile.neighbor_mines:
 		return
+	
 	# Reveal all unflagged, unrevealed neighbors
+	var revealed_count = 0
 	for neighbor_idx in tile.neighbors:
 		var n = tiles[neighbor_idx]
 		if not n.is_flagged and not n.is_revealed:
 			reveal_tile(n)
+			revealed_count += 1
+	
+	# Add bonus points for successful chord reveals
+	if revealed_count > 0:
+		current_game_score += revealed_count * 10 * (1 + int(difficulty_level))
+		
+	# Play chord reveal sound
+	audio_manager.play_chord_sound()
 
 func toggle_flag(tile):
 	if tile.is_revealed:
 		return
-	
+		
 	tile.is_flagged = not tile.is_flagged
-	
+		
+	# Track flag usage for scoring
+	flags_used += 1
+	if tile.is_flagged and tile.has_mine:
+		correct_flags += 1
+	elif not tile.is_flagged and tile.has_mine:
+		correct_flags -= 1
+		
 	var mat = tile.mesh.material_override as ShaderMaterial
 	if mat:
 		if tile.is_flagged:
 			mat.set_shader_parameter("u_state", 2.0) # Flagged
 		else:
 			mat.set_shader_parameter("u_state", 0.0) # Unrevealed
-	
+		
 	# Animate flag toggle
 	var mesh = tile.mesh
 	var tween = create_tween()
 	tween.tween_property(mesh, "scale", Vector3(1.2, 1.2, 1.2), 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tween.tween_property(mesh, "scale", Vector3.ONE, 0.1)
-	
+		
 	update_mine_counter()
 
 func add_number_to_tile(tile, text: String):
@@ -507,6 +555,65 @@ func clear_fireworks():
 		for c in fw_root.get_children():
 			c.queue_free()
 
+func apply_difficulty_settings():
+	# Adjust game parameters based on selected difficulty level
+	match difficulty_level:
+		DifficultyLevel.EASY:
+			globe_radius = 15.0
+			subdivision_level = 2
+			mine_percentage = 0.10
+			
+		DifficultyLevel.MEDIUM:
+			globe_radius = 20.0
+			subdivision_level = 3
+			mine_percentage = 0.15
+			
+		DifficultyLevel.HARD:
+			globe_radius = 25.0
+			subdivision_level = 4
+			mine_percentage = 0.20
+		
+	# Update camera zoom based on globe radius
+	target_zoom = globe_radius * 3
+	current_zoom = target_zoom
+	$Camera3D.position = Vector3(0, 0, current_zoom)
+
+func calculate_score():
+	# Calculate score based on various factors
+	var base_score = 100
+	var time_bonus = max(0, 1000 - int(game_timer * 10)) # Max 1000 points for speed
+	var efficiency_bonus = 0
+	
+	if total_safe_tiles > 0:
+		var efficiency = float(safe_tiles_revealed) / float(total_safe_tiles)
+		efficiency_bonus = int(efficiency * 500) # Max 500 points for efficiency
+	
+	var flag_accuracy_bonus = 0
+	if flags_used > 0:
+		var flag_accuracy = float(correct_flags) / float(flags_used)
+		flag_accuracy_bonus = int(flag_accuracy * 300) # Max 300 points for flag accuracy
+	
+	var streak_bonus = game_statistics.current_streak * 50 # 50 points per streak
+	
+	# Difficulty multiplier
+	var difficulty_multiplier = 1.0
+	match difficulty_level:
+		DifficultyLevel.EASY:
+			difficulty_multiplier = 0.8
+		DifficultyLevel.MEDIUM:
+			difficulty_multiplier = 1.0
+		DifficultyLevel.HARD:
+			difficulty_multiplier = 1.2
+	
+	current_game_score = int((base_score + time_bonus + efficiency_bonus + flag_accuracy_bonus + streak_bonus) * difficulty_multiplier)
+	
+	return current_game_score
+
+func calculate_efficiency():
+	if total_safe_tiles > 0:
+		return float(safe_tiles_revealed) / float(total_safe_tiles)
+	return 0.0
+
 func reset_game():
 	# Reset globe orientation and camera position to defaults for consistency after reset
 	$Globe.rotation = Vector3.ZERO
@@ -520,7 +627,21 @@ func reset_game():
 	
 	# Reset timer
 	reset_timer()
+	
+	# Reset scoring variables
+	current_game_score = 0
+	safe_tiles_revealed = 0
+	flags_used = 0
+	correct_flags = 0
+	
+	# Apply difficulty settings before generating globe
+	apply_difficulty_settings()
+	
 	generate_globe()
+	
+	# Calculate total safe tiles for scoring
+	total_safe_tiles = tiles.size() - int(tiles.size() * mine_percentage)
+	
 	mines_placed = false
 	update_mine_counter()
 	change_state(GameState.PLAYING)
@@ -581,9 +702,23 @@ func update_game_statistics(is_win: bool):
 		game_statistics.current_streak += 1
 		if game_statistics.current_streak > game_statistics.best_streak:
 			game_statistics.best_streak = game_statistics.current_streak
-		
+			
 		if game_timer < game_statistics.best_time:
 			game_statistics.best_time = game_timer
+		
+		# Update scoring statistics
+		calculate_score()
+		if current_game_score > game_statistics.high_score:
+			game_statistics.high_score = current_game_score
+		
+		var efficiency = calculate_efficiency()
+		if efficiency > game_statistics.best_efficiency:
+			game_statistics.best_efficiency = efficiency
+		
+		# Calculate streak score (score * streak)
+		var streak_score = current_game_score * game_statistics.current_streak
+		if streak_score > game_statistics.best_streak_score:
+			game_statistics.best_streak_score = streak_score
 	else:
 		game_statistics.current_streak = 0
 	
