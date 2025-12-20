@@ -1,0 +1,62 @@
+[gd_scene load_steps=2 format=3 uid="uid://bq3k8k2x23k8r"]
+
+[ext_resource type="Script" path="res://scripts/notification_manager.gd" id="1_1x23k"]
+
+[node name="NotificationManager" type="Control"]
+layout_mode = 3
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -420.0
+offset_top = -250.0
+offset_right = 0.0
+offset_bottom = 0.0
+mouse_filter = 2
+script = ExtResource("1_1x23k")
+
+[node name="NotificationContainer" type="VBoxContainer" parent="."]
+layout_mode = 0
+offset_left = 0.0
+offset_top = 0.0
+offset_right = 410.0
+offset_bottom = 250.0
+alignment = 2
+mouse_filter = 2
+
+[node name="NotificationTemplate" type="PanelContainer" parent="NotificationContainer"]
+visible = false
+custom_minimum_size = Vector2(400, 60)
+mouse_filter = 1
+
+[node name="MarginContainer" type="MarginContainer" parent="NotificationContainer/NotificationTemplate"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 8
+
+[node name="HBoxContainer" type="HBoxContainer" parent="NotificationContainer/NotificationTemplate/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="MessageLabel" type="Label" parent="NotificationContainer/NotificationTemplate/MarginContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Notification message"
+vertical_alignment = 1
+autowrap_mode = 2
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+
+[node name="CloseButton" type="Button" parent="NotificationContainer/NotificationTemplate/MarginContainer/HBoxContainer"]
+layout_mode = 2
+custom_minimum_size = Vector2(32, 32)
+focus_mode = 0
+text = "✕"
+
+[node name="Background" type="ColorRect" parent="NotificationContainer/NotificationTemplate"]
+show_behind_parent = true
+layout_mode = 2
+color = Color(0.2, 0.6, 1.0, 0.85)
+mouse_filter = 2

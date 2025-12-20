@@ -15,6 +15,11 @@ var tiles: Array = []
 const GlobeGeneratorScript = preload("res://scripts/globe_generator.gd")
 const AudioManagerScript = preload("res://scripts/audio_manager.gd")
 const InteractionManagerScript = preload("res://scripts/interaction_manager.gd")
+const TutorialManagerScript = preload("res://scripts/tutorial_manager.gd")
+const TutorialOverlayScene = preload("res://scenes/ui/tutorial_overlay.tscn")
+const PerformanceMonitorScript = preload("res://scripts/performance_monitor.gd")
+const NotificationManagerScene = preload("res://scenes/ui/notifications.tscn")
+const ImprovementValidatorScript = preload("res://scripts/improvement_validator.gd")
 const CURSOR_SCENE = preload("res://scenes/cursor.tscn")
 var globe_generator
 var audio_manager
@@ -116,6 +121,47 @@ func _ready():
 	interaction_manager.drag_ended.connect(func(): is_dragging_globe = false)
 	interaction_manager.drag_active.connect(_on_globe_dragged)
 	interaction_manager.zoom_changed.connect(_on_zoom_changed)
+
+	# Initialize tutorial system
+	var tutorial_manager = TutorialManagerScript.new()
+	add_child(tutorial_manager)
+	
+	var tutorial_overlay = TutorialOverlayScene.instantiate()
+	add_child(tutorial_overlay)
+	tutorial_overlay.set_tutorial_manager(tutorial_manager)
+	
+	# Connect tutorial signals
+	tutorial_manager.tutorial_started.connect(func(): interaction_manager.set_input_processing(false))
+	tutorial_manager.tutorial_completed.connect(func(): interaction_manager.set_input_processing(true))
+	tutorial_manager.tutorial_step_changed.connect(tutorial_overlay.show_tutorial_overlay)
+	tutorial_manager.skip_tutorial_requested.connect(_on_tutorial_skip_requested)
+	tutorial_manager.skip_tutorial_confirmed.connect(_on_tutorial_skip_confirmed)
+	tutorial_manager.skip_tutorial_cancelled.connect(_on_tutorial_skip_cancelled)
+	
+	# Ensure tutorial overlay is hidden initially
+	tutorial_overlay.hide_tutorial_overlay()
+	
+	# Initialize performance monitor
+	var performance_monitor = PerformanceMonitorScript.new()
+	add_child(performance_monitor)
+	performance_monitor.performance_warning.connect(_on_performance_warning)
+	performance_monitor.quality_adjusted.connect(_on_quality_adjusted)
+	performance_monitor.set_tile_count(tiles.size())
+	
+	# Initialize notification system
+	var notification_manager = NotificationManagerScene.instantiate()
+	add_child(notification_manager)
+	
+	# Initialize improvement validator
+	var validator = ImprovementValidatorScript.new()
+	add_child(validator)
+	validator.validation_complete.connect(_on_validation_complete)
+	validator.test_completed.connect(_on_test_completed)
+	validator.validation_test_failed.connect(_on_test_failed)
+	
+	# Check if tutorial should be shown
+	if tutorial_manager.should_show_tutorial():
+		tutorial_manager.start_tutorial()
 	
 	# Initialize cursor
 	cursor = CURSOR_SCENE.instantiate()
@@ -693,8 +739,12 @@ func load_game_statistics():
 	var save_path = "user://game_statistics.save"
 	if FileAccess.file_exists(save_path):
 		var file = FileAccess.open(save_path, FileAccess.READ)
-		game_statistics = file.get_var()
+		var loaded_stats = file.get_var()
 		file.close()
+		# Merge loaded stats with defaults to handle missing keys from older saves
+		if loaded_stats is Dictionary:
+			for key in loaded_stats.keys():
+				game_statistics[key] = loaded_stats[key]
 
 func save_game_statistics():
 	var save_path = "user://game_statistics.save"
@@ -746,6 +796,11 @@ func update_performance_stats():
 	performance_stats.draw_calls = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
 	performance_stats.vertices = 0 # Placeholder - vertices monitoring not available in this Godot version
 	performance_stats.tile_count = tiles.size()
+	
+	# Update performance monitor if it exists
+	if has_node("PerformanceMonitor"):
+		var pm = get_node("PerformanceMonitor")
+		pm.set_tile_count(tiles.size())
 
 func get_performance_report() -> String:
 	update_performance_stats()
@@ -770,3 +825,69 @@ func _apply_reveal_visuals(tile):
 			var n = clamp(tile.neighbor_mines, 0, 8)
 			mat.set_shader_parameter("u_state", 1.0) # Revealed
 			mat.set_shader_parameter("u_revealed_color", NEIGHBOR_COLORS[n])
+
+# Performance monitor callbacks
+func _on_performance_warning(message: String, severity: int):
+	print("PERFORMANCE WARNING: %s" % message)
+	# Show UI notification
+	if has_node("NotificationManager"):
+		var nm = get_node("NotificationManager")
+		nm.show_performance_notification(message, severity)
+
+func _on_quality_adjusted(new_quality: String):
+	print("QUALITY ADJUSTED: %s" % new_quality)
+	# Show UI notification
+	if has_node("NotificationManager"):
+		var nm = get_node("NotificationManager")
+		nm.show_notification("Quality adjusted to: %s" % new_quality, "success", 3.0)
+
+# Quality adjustment method for performance monitor
+func adjust_quality(settings: Dictionary):
+	# Adjust globe generation settings based on quality
+	if settings.has("max_subdivision"):
+		subdivision_level = min(subdivision_level, settings.max_subdivision)
+	
+	# Regenerate globe if quality changed significantly
+	if current_state == GameState.MENU:
+		apply_difficulty_settings()
+		generate_globe()
+		update_mine_counter()
+
+# Improvement validator callbacks
+func _on_validation_complete(results: Dictionary):
+	print("VALIDATION COMPLETE: %s" % str(results))
+	if has_node("NotificationManager"):
+		var nm = get_node("NotificationManager")
+		var success_rate = results.get("success_rate", 0.0)
+		if success_rate >= 80.0:
+			nm.show_notification("Improvement validation successful! %.1f%% passed." % success_rate, "success", 5.0)
+		else:
+			nm.show_notification("Improvement validation failed! %.1f%% passed." % success_rate, "error", 5.0)
+
+func _on_test_completed(test_name: String, message: String, passed: bool):
+	if passed:
+		print("TEST PASSED: %s - %s" % [test_name, message])
+	else:
+		print("TEST FAILED: %s - %s" % [test_name, message])
+
+func _on_test_failed(test_name: String, message: String):
+	print("VALIDATION ERROR: %s - %s" % [test_name, message])
+	if has_node("NotificationManager"):
+		var nm = get_node("NotificationManager")
+		nm.show_notification("Validation failed: %s" % test_name, "error", 4.0)
+
+# Tutorial callback functions
+func _on_tutorial_skip_requested():
+	if has_node("NotificationManager"):
+		var nm = get_node("NotificationManager")
+		nm.show_notification("Tutorial skip requested. Confirm in overlay.", "warning", 2.0)
+
+func _on_tutorial_skip_confirmed():
+	if has_node("NotificationManager"):
+		var nm = get_node("NotificationManager")
+		nm.show_notification("Tutorial skipped. You can always restart from the main menu.", "info", 3.0)
+
+func _on_tutorial_skip_cancelled():
+	if has_node("NotificationManager"):
+		var nm = get_node("NotificationManager")
+		nm.show_notification("Tutorial skip cancelled. Continue learning!", "success", 2.0)

@@ -23,6 +23,9 @@ signal menu_requested
 @onready var restart_button = $GameOver/VBoxContainer/RestartButton
 @onready var main_menu_button = $GameOver/VBoxContainer/MainMenuButton
 
+# Tutorial Overlay
+var tutorial_overlay: Control = null
+
 func _ready():
 	# Connect signals from children
 	if start_button:
@@ -37,6 +40,10 @@ func _ready():
 		restart_button.pressed.connect(_on_restart_button_pressed)
 	if main_menu_button:
 		main_menu_button.pressed.connect(_on_main_menu_button_pressed)
+	
+	# Initialize tutorial overlay if it exists
+	if has_node("TutorialOverlay"):
+		tutorial_overlay = get_node("TutorialOverlay")
 
 func show_main_menu():
 	main_menu.visible = true
@@ -84,3 +91,12 @@ func _on_main_menu_button_pressed():
 
 func _on_quit_button_pressed():
 	get_tree().quit()
+
+# Tutorial overlay methods
+func show_tutorial_overlay(step_data: Dictionary):
+	if tutorial_overlay and tutorial_overlay.has_method("show_tutorial_overlay"):
+		tutorial_overlay.show_tutorial_overlay(step_data)
+
+func hide_tutorial_overlay():
+	if tutorial_overlay and tutorial_overlay.has_method("hide_tutorial_overlay"):
+		tutorial_overlay.hide_tutorial_overlay()
