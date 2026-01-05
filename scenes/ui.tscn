@@ -1,11 +1,11 @@
 [gd_scene load_steps=7 format=3 uid="uid://bvk7w4xgtg7qj"]
 
-[ext_resource type="Script" uid="uid://dps0ivw067m0i" path="res://scripts/ui/ui_manager.gd" id="1_uimanager"]
-[ext_resource type="PackedScene" uid="uid://dmainmenu" path="res://scenes/ui/MainMenu.tscn" id="2_mainmenu"]
-[ext_resource type="PackedScene" uid="uid://dhud" path="res://scenes/ui/HUD.tscn" id="3_hud"]
-[ext_resource type="PackedScene" uid="uid://dgameover" path="res://scenes/ui/GameOver.tscn" id="4_gameover"]
-[ext_resource type="PackedScene" uid="uid://dpauesmenu" path="res://scenes/ui/PauseMenu.tscn" id="5_pausemenu"]
-[ext_resource type="PackedScene" uid="uid://dsettingsmenu" path="res://scenes/ui/SettingsMenu.tscn" id="6_settingsmenu"]
+[ext_resource type="Script" uid="uid://ui_manager" path="res://scripts/ui/ui_manager.gd" id="1_uimanager"]
+[ext_resource type="PackedScene" uid="uid://mainmenu_scene_id" path="res://scenes/ui/MainMenu.tscn" id="2_mainmenu"]
+[ext_resource type="PackedScene" uid="uid://hud_scene_id" path="res://scenes/ui/HUD.tscn" id="3_hud"]
+[ext_resource type="PackedScene" uid="uid://gameover_scene_id" path="res://scenes/ui/GameOver.tscn" id="4_gameover"]
+[ext_resource type="PackedScene" uid="uid://pausemenu_scene_id" path="res://scenes/ui/PauseMenu.tscn" id="5_pausemenu"]
+[ext_resource type="PackedScene" uid="uid://settingsmenu_scene_id" path="res://scenes/ui/SettingsMenu.tscn" id="6_settingsmenu"]
 
 [node name="UI" type="Control"]
 layout_mode = 3
