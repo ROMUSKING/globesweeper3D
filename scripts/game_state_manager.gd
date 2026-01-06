@@ -24,6 +24,7 @@ signal state_transition_attempted(from_state: GameState, to_state: GameState, su
 signal game_paused
 signal game_resumed
 signal game_started
+signal game_ended(victory: bool)
 signal game_reset
 signal settings_opened
 signal settings_closed
@@ -174,10 +175,10 @@ func _handle_paused_enter():
 	emit_signal("game_paused")
 
 func _handle_game_over_enter():
-	pass # Will be handled by external systems
+	emit_signal("game_ended", false)
 
 func _handle_victory_enter():
-	pass # Will be handled by external systems
+	emit_signal("game_ended", true)
 
 func _handle_settings_enter():
 	emit_signal("settings_opened")
