@@ -4,6 +4,9 @@ class_name GameStateManager
 # Comprehensive Game State Machine for GlobeSweeper 3D
 # Provides robust state management with validation, history, and integration capabilities
 
+# Constants
+const MAX_STATE_HISTORY: int = 20
+
 # Game States Enum
 enum GameState {
 	MENU, # Main menu state - handles navigation and difficulty selection
@@ -46,13 +49,11 @@ var debug_logging_enabled: bool = true
 var state_data: Dictionary = {}
 var paused_game_data: Dictionary = {}
 
-# Auto-pause configuration
-var auto_pause_on_lost_focus: bool = true
-var auto_pause_enabled: bool = true
+# Audio Manager reference for dependency injection
+var _audio_manager: Node = null
 
 func _ready():
 	_setup_state_transitions()
-	_setup_auto_pause()
 	_log_state_change(GameState.MENU, GameState.MENU, "Initial state set to MENU")
 	emit_signal("state_entered", GameState.MENU)
 
@@ -66,12 +67,6 @@ func _setup_state_transitions():
 		GameState.VICTORY: [GameState.MENU, GameState.PLAYING, GameState.SETTINGS],
 		GameState.SETTINGS: [GameState.MENU, GameState.PAUSED] # Can return to paused state
 	}
-
-func _setup_auto_pause():
-	"""Configure auto-pause behavior"""
-	if auto_pause_enabled:
-		get_tree().node_added.connect(_on_node_added)
-		get_tree().node_removed.connect(_on_node_removed)
 
 func change_state(new_state: GameState, reason: String = "") -> bool:
 	"""
@@ -89,7 +84,7 @@ func change_state(new_state: GameState, reason: String = "") -> bool:
 	
 	# Validate transition
 	if not _is_valid_transition(current_state, new_state):
-		var error_msg = "Invalid transition from %s to %s" % [_state_to_string(current_state), _state_to_string(new_state)]
+		var error_msg = "Invalid transition from %s to %s" % [get_state_name(current_state), get_state_name(new_state)]
 		_log_error(error_msg)
 		emit_signal("state_transition_attempted", current_state, new_state, false, error_msg)
 		return false
@@ -99,7 +94,7 @@ func change_state(new_state: GameState, reason: String = "") -> bool:
 	state_history.append(current_state)
 	
 	# Limit history size to prevent memory issues
-	if state_history.size() > 20:
+	if state_history.size() > MAX_STATE_HISTORY:
 		state_history.pop_front()
 	
 	# Exit current state
@@ -298,19 +293,6 @@ func toggle_pause() -> bool:
 		return resume_game()
 	return false
 
-# Auto-pause handling
-func _on_node_added(node: Node):
-	"""Handle node addition for auto-pause"""
-	if auto_pause_on_lost_focus and current_state == GameState.PLAYING:
-		# This could be enhanced to detect focus loss more precisely
-		pass
-
-func _on_node_removed(node: Node):
-	"""Handle node removal for auto-pause"""
-	if auto_pause_on_lost_focus and current_state == GameState.PLAYING:
-		# This could be enhanced to detect focus loss more precisely
-		pass
-
 # Game state persistence
 func _save_game_state():
 	"""Save current game state for persistence"""
@@ -352,7 +334,7 @@ func get_previous_state() -> GameState:
 	"""Get the previous state"""
 	return previous_state
 
-func _state_to_string(state: GameState) -> String:
+func get_state_name(state: GameState) -> String:
 	"""Convert state enum to string"""
 	match state:
 		GameState.MENU: return "MENU"
@@ -371,14 +353,14 @@ func enable_debug_logging(enabled: bool = true):
 func get_state_debug_info() -> Dictionary:
 	"""Get comprehensive debug information about current state"""
 	return {
-		"current_state": _state_to_string(current_state),
-		"previous_state": _state_to_string(previous_state),
+		"current_state": get_state_name(current_state),
+		"previous_state": get_state_name(previous_state),
 		"state_duration": get_state_duration(),
-		"state_history": state_history.map(func(state): return _state_to_string(state)),
-		"valid_transitions": valid_transitions.get(current_state, []).map(func(state): return _state_to_string(state)),
+		"state_history": state_history.map(func(state): return get_state_name(state)),
+		"valid_transitions": valid_transitions.get(current_state, []).map(func(state): return get_state_name(state)),
 		"can_interact": can_interact(),
 		"can_show_ui": can_show_ui(),
-		"auto_pause_enabled": auto_pause_enabled
+		"auto_pause_enabled": false
 	}
 
 func print_debug_info():
@@ -392,7 +374,7 @@ func print_debug_info():
 func _log_state_change(from_state: GameState, to_state: GameState, reason: String):
 	"""Log state changes if debug logging is enabled"""
 	if debug_logging_enabled:
-		var message = "State change: %s -> %s" % [_state_to_string(from_state), _state_to_string(to_state)]
+		var message = "State change: %s -> %s" % [get_state_name(from_state), get_state_name(to_state)]
 		if reason != "":
 			message += " (%s)" % reason
 		print(message)
@@ -403,24 +385,59 @@ func _log_error(message: String):
 
 func _play_state_transition_sound(sound_type: String):
 	"""Play audio feedback for state transitions"""
-	# Find audio manager in the scene tree
-	var audio_manager = get_tree().current_scene.find_child("AudioManager", true, false)
-	if audio_manager and audio_manager.has_method("play_state_transition_sound"):
-		audio_manager.play_state_transition_sound(sound_type)
+	# Use injected audio manager reference first
+	if _audio_manager and _audio_manager.has_method("play_state_transition_sound"):
+		_audio_manager.play_state_transition_sound(sound_type)
 	else:
-		# Fallback to basic click sound if available
-		var audio_players = get_tree().current_scene.find_children("*", "AudioStreamPlayer", true, false)
-		for player in audio_players:
-			if player.name == "Click" or player.name == "UI":
-				player.play()
-				break
+		# Fallback to scene tree search if not injected
+		var audio_manager = get_tree().current_scene.find_child("AudioManager", true, false)
+		if audio_manager and audio_manager.has_method("play_state_transition_sound"):
+			audio_manager.play_state_transition_sound(sound_type)
+		else:
+			# Fallback to basic click sound if available
+			var audio_players = get_tree().current_scene.find_children("*", "AudioStreamPlayer", true, false)
+			for player in audio_players:
+				if player.name == "Click" or player.name == "UI":
+					player.play()
+					break
+
+## Sets the AudioManager reference for dependency injection.
+## Call this from main.gd after AudioManager is ready to remove scene tree coupling.
+## 
+## Args:
+## 	audio_manager: Reference to the AudioManager node
+func set_audio_manager_ref(audio_manager: Node):
+	_audio_manager = audio_manager
 
 # Public API for external integration
 func force_state_change(new_state: GameState, reason: String = "") -> bool:
-	"""Force state change without validation (use with caution)"""
+	"""
+	Force state change with proper enter/exit handler calls.
+	This maintains state machine integrity even during forced transitions.
+	
+	Args:
+		new_state: The target state to transition to
+		reason: Optional reason for the state change (for debugging)
+	
+	Returns:
+		bool: True if state change was successful
+	"""
 	var old_state = current_state
+	
+	# Exit current state properly
+	emit_signal("state_exited", current_state)
+	_handle_state_exit(current_state)
+	
+	# Update state
 	current_state = new_state
+	state_entry_times[current_state] = Time.get_unix_time_from_system()
+	
+	# Log and emit signals
 	_log_state_change(old_state, new_state, "FORCED: " + reason)
 	emit_signal("state_changed", old_state, new_state)
 	emit_signal("state_entered", new_state)
+	
+	# Enter new state properly
+	_handle_state_enter(new_state)
+	
 	return true

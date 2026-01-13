@@ -1,6 +1,9 @@
 class_name PowerupManager
 extends Node
 
+## Manages powerup inventory, purchasing, activation, and cooldowns for GlobeSweeper 3D.
+## Provides consistent game result handling through the GameResult class.
+
 signal powerup_purchased(powerup_type: String, cost: int)
 signal powerup_activated(powerup_type: String)
 signal powerup_deactivated(powerup_type: String)
@@ -74,23 +77,31 @@ func initialize_cooldowns():
 		powerup_cooldowns[powerup_type] = 0.0
 
 func can_purchase_powerup(powerup_type: String, available_score: int) -> bool:
+	"""Checks if a powerup can be purchased with the given score.
+	
+	Args:
+		powerup_type: The type of powerup to check
+		available_score: The player's current score points
+	
+	Returns: True if the powerup can be purchased
+	"""
 	if not POWERUP_DEFINITIONS.has(powerup_type):
 		return false
-		
+	
 	var cost = get_adjusted_powerup_cost(powerup_type)
 	return available_score >= cost
 
 func purchase_powerup(powerup_type: String, available_score: int) -> Dictionary:
 	"""
-	Attempts to purchase a powerup
-	Returns: {
-		"success": bool,
-		"message": String,
-		"remaining_score": int,
-		"new_inventory": Dictionary
-	}
-	"""
+	Attempts to purchase a powerup.
 	
+	Args:
+		powerup_type: The type of powerup to purchase
+		available_score: The player's current score points
+	
+	Returns:
+		Dictionary: Result containing success status, message, and updated inventory
+	"""
 	if not can_purchase_powerup(powerup_type, available_score):
 		return {
 			"success": false,
@@ -116,7 +127,7 @@ func purchase_powerup(powerup_type: String, available_score: int) -> Dictionary:
 			"type": powerup_type,
 			"action": "purchase",
 			"cost": cost,
-			"needed": remaining_score < cost * 0.5 # Consider "needed" if barely had enough score
+			"needed": remaining_score < cost * 0.5
 		})
 	
 	return {
@@ -127,35 +138,44 @@ func purchase_powerup(powerup_type: String, available_score: int) -> Dictionary:
 	}
 
 func can_activate_powerup(powerup_type: String) -> bool:
+	"""Checks if a powerup can be activated.
+	
+	Checks inventory availability, cooldowns, and active duration.
+	
+	Args:
+		powerup_type: The type of powerup to check
+	
+	Returns: True if the powerup can be activated
+	"""
 	if not POWERUP_DEFINITIONS.has(powerup_type):
 		return false
-		
+	
 	if not powerup_inventory[powerup_type].has("available"):
 		return false
-		
+	
 	if powerup_inventory[powerup_type]["available"] <= 0:
 		return false
-		
+	
 	# Check cooldown
 	if powerup_cooldowns[powerup_type] > 0.0:
 		return false
-		
+	
 	# Check if already active (for duration-based powerups)
 	if active_powerups.has(powerup_type) and active_powerups[powerup_type] > 0.0:
 		return false
-		
+	
 	return true
 
 func activate_powerup(powerup_type: String) -> Dictionary:
 	"""
-	Activates a powerup if available
-	Returns: {
-		"success": bool,
-		"message": String,
-		"effect_data": Dictionary
-	}
-	"""
+	Activates a powerup if available.
 	
+	Args:
+		powerup_type: The type of powerup to activate
+	
+	Returns:
+		Dictionary: Result containing success status, message, and effect data
+	"""
 	if not can_activate_powerup(powerup_type):
 		return {
 			"success": false,
@@ -259,6 +279,11 @@ func activate_time_freeze() -> Dictionary:
 	return {"freeze_duration": 0.0}
 
 func update_cooldowns(delta: float):
+	"""Updates all powerup cooldowns and active powerup durations.
+	
+	Args:
+		delta: Time elapsed since last update in seconds
+	"""
 	# Update all powerup cooldowns
 	for powerup_type in powerup_cooldowns.keys():
 		if powerup_cooldowns[powerup_type] > 0.0:

@@ -431,136 +431,99 @@ func update_powerup_display(powerup_type: String):
 			update_time_freeze_ui(status)
 
 func update_reveal_protection_ui(status: Dictionary):
-	if reveal_protection_status:
-		reveal_protection_status.text = "Owned: %d | Available: %d" % [status.get("owned", 0), status.get("available", 0)]
-	
-	# Update buy button
-	if reveal_protection_buy_button:
-		var can_purchase = status.get("can_purchase", false)
-		reveal_protection_buy_button.disabled = not can_purchase
-		reveal_protection_buy_button.modulate = Color.GRAY if not can_purchase else Color.WHITE
-	
-	# Update activate button
-	if reveal_protection_activate_button:
-		var can_activate = status.get("can_activate", false)
-		reveal_protection_activate_button.disabled = not can_activate
-		reveal_protection_activate_button.modulate = Color.GRAY if not can_activate else Color.GREEN
-	
-	# Update cooldown display
-	if reveal_protection_cooldown:
-		var cooldown = status.get("cooldown", 0.0)
-		if cooldown > 0.0:
-			reveal_protection_cooldown.text = "Cooldown: %.1fs" % cooldown
-			reveal_protection_cooldown.visible = true
-		else:
-			reveal_protection_cooldown.visible = false
+	update_powerup_card_ui("reveal_protection", status, {
+		"status": reveal_protection_status,
+		"buy_button": reveal_protection_buy_button,
+		"activate_button": reveal_protection_activate_button,
+		"cooldown": reveal_protection_cooldown,
+		"activate_color": Color.GREEN
+	})
 
 func update_reveal_mine_ui(status: Dictionary):
-	if reveal_mine_status:
-		reveal_mine_status.text = "Owned: %d | Available: %d" % [status.get("owned", 0), status.get("available", 0)]
-	
-	# Update buy button
-	if reveal_mine_buy_button:
-		var can_purchase = status.get("can_purchase", false)
-		reveal_mine_buy_button.disabled = not can_purchase
-		reveal_mine_buy_button.modulate = Color.GRAY if not can_purchase else Color.WHITE
-	
-	# Update activate button
-	if reveal_mine_activate_button:
-		var can_activate = status.get("can_activate", false)
-		reveal_mine_activate_button.disabled = not can_activate
-		reveal_mine_activate_button.modulate = Color.GRAY if not can_activate else Color.GREEN
-	
-	# Update cooldown display
-	if reveal_mine_cooldown:
-		var cooldown = status.get("cooldown", 0.0)
-		if cooldown > 0.0:
-			reveal_mine_cooldown.text = "Cooldown: %.1fs" % cooldown
-			reveal_mine_cooldown.visible = true
-		else:
-			reveal_mine_cooldown.visible = false
+	update_powerup_card_ui("reveal_mine", status, {
+		"status": reveal_mine_status,
+		"buy_button": reveal_mine_buy_button,
+		"activate_button": reveal_mine_activate_button,
+		"cooldown": reveal_mine_cooldown,
+		"activate_color": Color.GREEN
+	})
 
 func update_reveal_safe_tile_ui(status: Dictionary):
-	if reveal_safe_tile_status:
-		reveal_safe_tile_status.text = "Owned: %d | Available: %d" % [status.get("owned", 0), status.get("available", 0)]
-	
-	# Update buy button
-	if reveal_safe_tile_buy_button:
-		var can_purchase = status.get("can_purchase", false)
-		reveal_safe_tile_buy_button.disabled = not can_purchase
-		reveal_safe_tile_buy_button.modulate = Color.GRAY if not can_purchase else Color.WHITE
-	
-	# Update activate button
-	if reveal_safe_tile_activate_button:
-		var can_activate = status.get("can_activate", false)
-		reveal_safe_tile_activate_button.disabled = not can_activate
-		reveal_safe_tile_activate_button.modulate = Color.GRAY if not can_activate else Color.GREEN
-	
-	# Update cooldown display
-	if reveal_safe_tile_cooldown:
-		var cooldown = status.get("cooldown", 0.0)
-		if cooldown > 0.0:
-			reveal_safe_tile_cooldown.text = "Cooldown: %.1fs" % cooldown
-			reveal_safe_tile_cooldown.visible = true
-		else:
-			reveal_safe_tile_cooldown.visible = false
+	update_powerup_card_ui("reveal_safe_tile", status, {
+		"status": reveal_safe_tile_status,
+		"buy_button": reveal_safe_tile_buy_button,
+		"activate_button": reveal_safe_tile_activate_button,
+		"cooldown": reveal_safe_tile_cooldown,
+		"activate_color": Color.GREEN
+	})
 
 func update_hint_system_ui(status: Dictionary):
-	if hint_system_status:
-		hint_system_status.text = "Owned: %d | Available: %d" % [status.get("owned", 0), status.get("available", 0)]
-	
-	# Update buy button
-	if hint_system_buy_button:
-		var can_purchase = status.get("can_purchase", false)
-		hint_system_buy_button.disabled = not can_purchase
-		hint_system_buy_button.modulate = Color.GRAY if not can_purchase else Color.WHITE
-	
-	# Update activate button
-	if hint_system_activate_button:
-		var can_activate = status.get("can_activate", false)
-		hint_system_activate_button.disabled = not can_activate
-		hint_system_activate_button.modulate = Color.GRAY if not can_activate else Color.GREEN
-	
-	# Update cooldown display
-	if hint_system_cooldown:
-		var cooldown = status.get("cooldown", 0.0)
-		if cooldown > 0.0:
-			hint_system_cooldown.text = "Cooldown: %.1fs" % cooldown
-			hint_system_cooldown.visible = true
-		else:
-			hint_system_cooldown.visible = false
+	update_powerup_card_ui("hint_system", status, {
+		"status": hint_system_status,
+		"buy_button": hint_system_buy_button,
+		"activate_button": hint_system_activate_button,
+		"cooldown": hint_system_cooldown,
+		"activate_color": Color.GREEN
+	})
 
 func update_time_freeze_ui(status: Dictionary):
-	if time_freeze_status:
-		time_freeze_status.text = "Owned: %d | Available: %d" % [status.get("owned", 0), status.get("available", 0)]
+	update_powerup_card_ui("time_freeze", status, {
+		"status": time_freeze_status,
+		"buy_button": time_freeze_buy_button,
+		"activate_button": time_freeze_activate_button,
+		"cooldown": time_freeze_cooldown,
+		"activate_color": Color.CYAN
+	})
+
+## Generic method to update powerup card UI elements.
+## Handles common UI update logic for all powerup types.
+## 
+## Args:
+## 	powerup_type: The type of powerup being updated
+## 	status: Dictionary containing powerup status information
+## 	elements: Dictionary containing UI element references and configuration
+func update_powerup_card_ui(powerup_type: String, status: Dictionary, elements: Dictionary) -> void:
+	# Update status label
+	if elements.has("status") and elements.status:
+		elements.status.text = "Owned: %d | Available: %d" % [status.get("owned", 0), status.get("available", 0)]
 	
 	# Update buy button
-	if time_freeze_buy_button:
+	if elements.has("buy_button") and elements.buy_button:
 		var can_purchase = status.get("can_purchase", false)
-		time_freeze_buy_button.disabled = not can_purchase
-		time_freeze_buy_button.modulate = Color.GRAY if not can_purchase else Color.WHITE
+		elements.buy_button.disabled = not can_purchase
+		elements.buy_button.modulate = Color.GRAY if not can_purchase else Color.WHITE
 	
 	# Update activate button
-	if time_freeze_activate_button:
+	if elements.has("activate_button") and elements.activate_button:
 		var can_activate = status.get("can_activate", false)
-		time_freeze_activate_button.disabled = not can_activate
-		time_freeze_activate_button.modulate = Color.GRAY if not can_activate else Color.GREEN
+		elements.activate_button.disabled = not can_activate
+		var activate_color = elements.get("activate_color", Color.GREEN)
+		elements.activate_button.modulate = Color.GRAY if not can_activate else activate_color
 	
 	# Update cooldown display
-	if time_freeze_cooldown:
+	if elements.has("cooldown") and elements.cooldown:
 		var cooldown = status.get("cooldown", 0.0)
 		var active_duration = status.get("active_duration", 0.0)
 		
-		if active_duration > 0.0:
-			time_freeze_cooldown.text = "Active: %.1fs" % active_duration
-			time_freeze_cooldown.visible = true
-			time_freeze_cooldown.modulate = Color.CYAN
-		elif cooldown > 0.0:
-			time_freeze_cooldown.text = "Cooldown: %.1fs" % cooldown
-			time_freeze_cooldown.visible = true
-			time_freeze_cooldown.modulate = Color.RED
+		if powerup_type == "time_freeze":
+			# Special handling for time freeze with active duration
+			if active_duration > 0.0:
+				elements.cooldown.text = "Active: %.1fs" % active_duration
+				elements.cooldown.visible = true
+				elements.cooldown.modulate = Color.CYAN
+			elif cooldown > 0.0:
+				elements.cooldown.text = "Cooldown: %.1fs" % cooldown
+				elements.cooldown.visible = true
+				elements.cooldown.modulate = Color.RED
+			else:
+				elements.cooldown.visible = false
 		else:
-			time_freeze_cooldown.visible = false
+			# Standard cooldown display
+			if cooldown > 0.0:
+				elements.cooldown.text = "Cooldown: %.1fs" % cooldown
+				elements.cooldown.visible = true
+			else:
+				elements.cooldown.visible = false
 
 # Powerup Button Event Handlers
 func _on_reveal_protection_buy_pressed():
@@ -833,98 +796,3 @@ func _on_rollback_difficulty_pressed():
 		difficulty_scaling_manager.rollback_difficulty(1)
 	difficulty_rollback_requested.emit(1)
 	show_powerup_feedback("Difficulty Rolled Back", Color.PURPLE)
-
-func test_powerup_ui():
-	"""Test function to validate powerup UI components"""
-	print("=== POWERUP UI TEST RESULTS ===")
-	
-	# Test HUD visibility
-	var hud_visible = hud and hud.visible
-	print("HUD visible: ", hud_visible)
-	
-	# Test powerup panel visibility
-	var panel_visible = powerup_panel and powerup_panel.visible
-	print("Powerup panel visible: ", panel_visible)
-	
-	# Test button references
-	var buttons_working = true
-	var test_buttons = [
-		["Reveal Protection Buy", reveal_protection_buy_button],
-		["Reveal Mine Buy", reveal_mine_buy_button],
-		["Reveal Safe Tile Buy", reveal_safe_tile_buy_button],
-		["Hint System Buy", hint_system_buy_button],
-		["Time Freeze Buy", time_freeze_buy_button],
-		["Reveal Protection Activate", reveal_protection_activate_button],
-		["Reveal Mine Activate", reveal_mine_activate_button],
-		["Reveal Safe Tile Activate", reveal_safe_tile_activate_button],
-		["Hint System Activate", hint_system_activate_button],
-		["Time Freeze Activate", time_freeze_activate_button]
-	]
-	
-	for button_info in test_buttons:
-		var button_name = button_info[0]
-		var button = button_info[1]
-		if not button:
-			print("ERROR: ", button_name, " button is null")
-			buttons_working = false
-		else:
-			print("✓ ", button_name, " button found")
-	
-	print("All buttons working: ", buttons_working)
-	
-	# Test status labels
-	var status_labels_working = true
-	var test_status_labels = [
-		["Reveal Protection Status", reveal_protection_status],
-		["Reveal Mine Status", reveal_mine_status],
-		["Reveal Safe Tile Status", reveal_safe_tile_status],
-		["Hint System Status", hint_system_status],
-		["Time Freeze Status", time_freeze_status]
-	]
-	
-	for status_info in test_status_labels:
-		var status_name = status_info[0]
-		var status_label = status_info[1]
-		if not status_label:
-			print("ERROR: ", status_name, " label is null")
-			status_labels_working = false
-		else:
-			print("✓ ", status_name, " label found")
-	
-	print("All status labels working: ", status_labels_working)
-	
-	# Test cooldown labels
-	var cooldown_labels_working = true
-	var test_cooldown_labels = [
-		["Reveal Protection Cooldown", reveal_protection_cooldown],
-		["Reveal Mine Cooldown", reveal_mine_cooldown],
-		["Reveal Safe Tile Cooldown", reveal_safe_tile_cooldown],
-		["Hint System Cooldown", hint_system_cooldown],
-		["Time Freeze Cooldown", time_freeze_cooldown]
-	]
-	
-	for cooldown_info in test_cooldown_labels:
-		var cooldown_name = cooldown_info[0]
-		var cooldown_label = cooldown_info[1]
-		if not cooldown_label:
-			print("ERROR: ", cooldown_name, " label is null")
-			cooldown_labels_working = false
-		else:
-			print("✓ ", cooldown_name, " label found")
-	
-	print("All cooldown labels working: ", cooldown_labels_working)
-	
-	# Test powerup manager reference
-	var manager_connected = powerup_manager != null
-	print("Powerup manager connected: ", manager_connected)
-	
-	# Test difficulty scaling manager reference
-	var scaling_connected = difficulty_scaling_manager != null
-	print("Difficulty scaling manager connected: ", scaling_connected)
-	
-	# Overall test result
-	var all_tests_passed = hud_visible and panel_visible and buttons_working and status_labels_working and cooldown_labels_working and scaling_connected
-	print("\nOVERALL TEST RESULT: ", "PASSED" if all_tests_passed else "FAILED")
-	print("============================")
-	
-	return all_tests_passed

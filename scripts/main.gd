@@ -133,18 +133,22 @@ func _ready():
 	# Initialize audio manager
 	audio_manager = AudioManagerScript.new()
 	add_child(audio_manager)
+	
+	# Inject audio manager reference into game state manager
+	game_state_manager.set_audio_manager_ref(audio_manager)
 
 	# Initialize powerup manager
 	powerup_manager = PowerupManagerScript.new()
 	add_child(powerup_manager)
 	powerup_manager.set_main_script_reference(self)
-	powerup_manager.set_difficulty_scaling_manager_reference(difficulty_scaling_manager)
 	powerup_manager.score_deducted.connect(_on_score_deducted)
 	powerup_manager.powerup_activated.connect(_on_powerup_activated)
 
 	# Initialize difficulty scaling manager
 	difficulty_scaling_manager = DifficultyScalingManagerScript.new()
 	add_child(difficulty_scaling_manager)
+	# Set difficulty scaling manager reference after initialization
+	powerup_manager.set_difficulty_scaling_manager_reference(difficulty_scaling_manager)
 	difficulty_scaling_manager.set_main_script_reference(self)
 	difficulty_scaling_manager.set_powerup_manager_reference(powerup_manager)
 	difficulty_scaling_manager.set_game_state_manager_reference(game_state_manager)
@@ -852,10 +856,35 @@ func _on_menu_requested():
 # Statistics and timer functions
 func load_game_statistics():
 	var save_path = "user://game_statistics.save"
+	var default_statistics = {
+		"games_played": 0,
+		"games_won": 0,
+		"best_time": 9999.0,
+		"total_time": 0.0,
+		"current_streak": 0,
+		"best_streak": 0,
+		"high_score": 0,
+		"best_efficiency": 0.0,
+		"best_streak_score": 0
+	}
+	
 	if FileAccess.file_exists(save_path):
 		var file = FileAccess.open(save_path, FileAccess.READ)
-		game_statistics = file.get_var()
-		file.close()
+		if file:
+			var loaded_data = file.get_var()
+			file.close()
+			# Validate loaded data has expected structure
+			if typeof(loaded_data) == TYPE_DICTIONARY and loaded_data.has("games_played"):
+				game_statistics = loaded_data
+			else:
+				printerr("Invalid game statistics format in save file")
+				game_statistics = default_statistics
+		else:
+			printerr("Failed to open save file for reading: ", save_path)
+			game_statistics = default_statistics
+	else:
+		# No save file exists, use default statistics
+		game_statistics = default_statistics
 
 func save_game_statistics():
 	var save_path = "user://game_statistics.save"

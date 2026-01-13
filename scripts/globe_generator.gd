@@ -1,6 +1,9 @@
 class_name GlobeGenerator
 extends Node
 
+## Generates a 3D icosphere globe with hexagonal and pentagonal tiles for the GlobeSweeper game.
+## Uses procedural mesh generation for optimal performance.
+
 var icosphere_faces: Array = []
 var globe_radius: float
 var subdivision_level: int
@@ -11,7 +14,20 @@ var tile_material_template: ShaderMaterial
 var shared_hex_mesh: Mesh = null
 var shared_pent_mesh: Mesh = null
 
+# Mesh cache for different side configurations
+var _mesh_cache: Dictionary = {}
+
 func generate(parent_node: Node3D, radius: float, subdivisions: int, material_template: ShaderMaterial) -> Dictionary:
+	"""Generates a complete icosphere globe with tiles.
+	
+	Args:
+		parent_node: The node to add tiles as children of
+		radius: The radius of the globe
+		subdivisions: Number of subdivisions (higher = more tiles)
+		material_template: ShaderMaterial to use for tile rendering
+	
+	Returns: Dictionary containing 'tiles' array, 'hex_radius', and 'generation_time'
+	"""
 	globe_radius = radius
 	subdivision_level = subdivisions
 	tile_material_template = material_template
@@ -80,6 +96,10 @@ func generate(parent_node: Node3D, radius: float, subdivisions: int, material_te
 	}
 
 func get_icosphere_vertices() -> Array:
+	"""Generates icosphere vertices using subdivision of an icosahedron.
+	
+	Returns: Array of Vector3 vertices normalized to unit sphere
+	"""
 	# Start with icosahedron vertices
 	var phi = (1.0 + sqrt(5.0)) / 2.0 # Golden ratio
 	var vertices = [
@@ -127,6 +147,18 @@ func get_icosphere_vertices() -> Array:
 	return vertices
 
 func get_midpoint(i1: int, i2: int, vertices: Array, cache: Dictionary) -> int:
+	"""Gets or creates a normalized midpoint vertex between two vertices.
+	
+	Uses caching to avoid duplicate midpoints for efficiency.
+	
+	Args:
+		i1: Index of first vertex
+		i2: Index of second vertex
+		vertices: Array to add new midpoint to
+		cache: Dictionary mapping vertex pairs to indices
+	
+	Returns: Index of the midpoint vertex in the vertices array
+	"""
 	var key = [min(i1, i2), max(i1, i2)]
 	if key in cache:
 		return cache[key]
@@ -141,51 +173,124 @@ func get_midpoint(i1: int, i2: int, vertices: Array, cache: Dictionary) -> int:
 	return index
 
 func generate_tile_mesh(sides: int) -> Mesh:
-	# Create temporary CSG scene for mesh generation
-	var temp_csg = CSGCombiner3D.new()
-
-	# Main cylinder body
-	var csg_cylinder = CSGCylinder3D.new()
-	csg_cylinder.radius = hex_radius
-	csg_cylinder.height = 2.6 # Leave space for rounded edges
-	csg_cylinder.sides = sides
-	temp_csg.add_child(csg_cylinder)
-
-	# Add small spheres at corners for rounded edges
+	"""Generates a procedural mesh for a tile with the given number of sides.
+	
+	Uses SurfaceTool for efficient mesh generation with proper UV coordinates.
+	Results are cached to avoid regeneration for the same side count.
+	
+	Args:
+		sides: Number of sides (6 for hexagon, 5 for pentagon)
+	
+	Returns: The generated ArrayMesh
+	"""
+	# Check cache first
+	if _mesh_cache.has(sides):
+		return _mesh_cache[sides]
+	
+	# Create procedural mesh using SurfaceTool for efficiency
+	var st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(0)
+	
+	# Calculate tile height based on hex_radius
+	var tile_height = hex_radius * 1.0
+	var top_y = tile_height / 2.0
+	var bottom_y = - tile_height / 2.0
+	
+	# Generate vertices for the prism/pyramid shape
 	for i in range(sides):
 		var angle = (i * PI * 2) / sides
-		var sphere = CSGSphere3D.new()
-		sphere.radius = hex_radius * 0.15 # Small radius for edge rounding
-		sphere.position = Vector3(
-			cos(angle) * hex_radius,
-			1.3, # Position at top of cylinder
-			sin(angle) * hex_radius
-		)
-		temp_csg.add_child(sphere)
-
-	# Bake the CSG mesh
-	temp_csg._update_shape() # Force update
-	var meshes = temp_csg.get_meshes()
-	var baked_mesh: Mesh = null
-	
-	if meshes.size() > 1:
-		baked_mesh = meshes[1] as Mesh
-	else:
-		# Fallback
-		var cylinder_mesh = CylinderMesh.new()
-		cylinder_mesh.top_radius = hex_radius
-		cylinder_mesh.bottom_radius = hex_radius
-		cylinder_mesh.height = 3.0
-		cylinder_mesh.radial_segments = sides
-		cylinder_mesh.rings = 2
-		baked_mesh = cylinder_mesh
+		var next_angle = ((i + 1) % sides) * PI * 2 / sides
 		
-	# Cleanup
-	temp_csg.queue_free()
+		var x1 = cos(angle) * hex_radius
+		var z1 = sin(angle) * hex_radius
+		var x2 = cos(next_angle) * hex_radius
+		var z2 = sin(next_angle) * hex_radius
+		
+		# Top face vertex (center)
+		var top_center = Vector3(0, top_y, 0)
+		var top_v1 = Vector3(x1, top_y, z1)
+		var top_v2 = Vector3(x2, top_y, z2)
+		
+		# Bottom face vertex (center)
+		var bottom_center = Vector3(0, bottom_y, 0)
+		var bottom_v1 = Vector3(x1, bottom_y, z1)
+		var bottom_v2 = Vector3(x2, bottom_y, z2)
+		
+		# Calculate normal for side face
+		var edge_center = (top_v1 + top_v2 + bottom_v1 + bottom_v2) / 4.0
+		var side_normal = edge_center.normalized()
+		
+		# UV coordinates
+		var uv_center = Vector2(0.5, 0.5)
+		var uv_v1 = Vector2(0.5 + cos(angle) * 0.5, 0.5 + sin(angle) * 0.5)
+		var uv_v2 = Vector2(0.5 + cos(next_angle) * 0.5, 0.5 + sin(next_angle) * 0.5)
+		
+		# Top face (two triangles)
+		st.set_normal(Vector3.UP)
+		st.set_uv(uv_center)
+		st.add_vertex(top_center)
+		st.set_normal(Vector3.UP)
+		st.set_uv(uv_v1)
+		st.add_vertex(top_v1)
+		st.set_normal(Vector3.UP)
+		st.set_uv(uv_v2)
+		st.add_vertex(top_v2)
+		
+		# Bottom face (two triangles, winding reversed)
+		st.set_normal(Vector3.DOWN)
+		st.set_uv(uv_center)
+		st.add_vertex(bottom_center)
+		st.set_normal(Vector3.DOWN)
+		st.set_uv(uv_v2)
+		st.add_vertex(bottom_v2)
+		st.set_normal(Vector3.DOWN)
+		st.set_uv(uv_v1)
+		st.add_vertex(bottom_v1)
+		
+		# Side face (two triangles)
+		st.set_normal(side_normal)
+		st.set_uv(Vector2(0.0, 0.0))
+		st.add_vertex(top_v1)
+		st.set_normal(side_normal)
+		st.set_uv(Vector2(1.0, 0.0))
+		st.add_vertex(top_v2)
+		st.set_normal(side_normal)
+		st.set_uv(Vector2(1.0, 1.0))
+		st.add_vertex(bottom_v2)
+		
+		st.set_normal(side_normal)
+		st.set_uv(Vector2(0.0, 0.0))
+		st.add_vertex(top_v1)
+		st.set_normal(side_normal)
+		st.set_uv(Vector2(1.0, 1.0))
+		st.add_vertex(bottom_v2)
+		st.set_normal(side_normal)
+		st.set_uv(Vector2(0.0, 1.0))
+		st.add_vertex(bottom_v1)
 	
-	return baked_mesh
+	# Commit the mesh
+	st.generate_normals()
+	var mesh = st.commit()
+	
+	# Cache the mesh for reuse
+	_mesh_cache[sides] = mesh
+	
+	return mesh
 
 func create_tile_at_position(index: int, pos: Vector3, parent_node: Node3D, is_pentagon: bool) -> Tile:
+	"""Creates a tile at the specified position on the globe.
+	
+	Creates the visual mesh, collision shape, and sets up metadata for interaction.
+	
+	Args:
+		index: Unique index for this tile
+		pos: Normalized position vector on the sphere
+		parent_node: Parent node to attach the tile to
+		is_pentagon: True if this is a pentagonal tile (first 12 vertices)
+	
+	Returns: The created Tile object with references to its node and mesh
+	"""
 	var world_pos = pos * globe_radius
 	var tile = Tile.new(index, pos, world_pos)
 	
@@ -244,6 +349,14 @@ func create_tile_at_position(index: int, pos: Vector3, parent_node: Node3D, is_p
 	return tile
 
 func calculate_neighbors(vertices: Array, tiles: Array):
+	"""Calculates and populates the neighbor relationships for all tiles.
+	
+	Builds adjacency from icosphere face edges for exact hex/pent adjacency.
+	
+	Args:
+		vertices: Array of vertex positions
+		tiles: Array of Tile objects to populate with neighbors
+	"""
 	# Build adjacency from icosphere face edges (exact hex/pent adjacency)
 	var neighbor_sets: Array = []
 	neighbor_sets.resize(vertices.size())

@@ -1,6 +1,9 @@
 class_name InteractionManager
 extends Node3D
 
+## Handles all user input and interaction with the 3D globe in GlobeSweeper 3D.
+## Processes mouse/touch input for tile selection, camera rotation, and powerup activation.
+
 signal tile_hovered(index: int)
 signal tile_clicked(index: int, button_index: int)
 signal drag_started
@@ -26,16 +29,16 @@ var game_state_manager: Node = null
 
 func _ready():
 	process_mode = Node.PROCESS_MODE_PAUSABLE
-	_set_input_processing(true) # Start with input processing enabled by default
+	_update_processing_mode(true) # Start with input processing enabled by default
 
 func set_input_processing(enable: bool):
-	_set_input_processing(enable)
+	_update_processing_mode(enable)
 
 func set_game_state_manager_reference(manager: Node):
-	"""Sets the Game State Manager reference for state-aware input handling"""
+	"""Sets the Game State Manager reference for state-aware input handling."""
 	game_state_manager = manager
 
-func _set_input_processing(enable: bool):
+func _update_processing_mode(enable: bool):
 	# Control whether this node processes input
 	if enable:
 		process_mode = Node.PROCESS_MODE_PAUSABLE
@@ -195,7 +198,12 @@ func _get_tile_index_at(screen_pos: Vector2) -> int:
 
 # Powerup activation methods
 func request_powerup_activation(powerup_type: String, target_index: int = -1):
-	"""Public method to request powerup activation (can be called from UI)"""
+	"""Public method to request powerup activation (can be called from UI).
+	
+	Args:
+		powerup_type: The type of powerup to activate
+		target_index: Optional tile index to target with the powerup
+	"""
 	if target_index != -1:
 		# Set temporary hover for targeted powerups
 		_current_hovered_index = target_index
@@ -204,15 +212,19 @@ func request_powerup_activation(powerup_type: String, target_index: int = -1):
 	powerup_activation_requested.emit(powerup_type)
 
 func get_current_hovered_tile() -> int:
-	"""Returns the currently hovered tile index"""
+	"""Returns the currently hovered tile index."""
 	return _current_hovered_index
 
 func is_input_processing_enabled() -> bool:
-	"""Returns whether input processing is currently enabled"""
+	"""Returns whether input processing is currently enabled."""
 	return process_mode == Node.PROCESS_MODE_PAUSABLE
 
 func set_powerup_mode(enabled: bool):
-	"""Enables or disables powerup interaction mode"""
+	"""Enables or disables powerup interaction mode.
+	
+	Args:
+		enabled: True to enable powerup mode, false to disable
+	"""
 	if enabled:
 		# In powerup mode, we might want different behavior
 		# For now, just log the mode change
@@ -222,11 +234,11 @@ func set_powerup_mode(enabled: bool):
 
 # Utility methods for powerup integration
 func get_tile_at_position(screen_pos: Vector2) -> int:
-	"""Alternative method name for getting tile at screen position"""
+	"""Alternative method name for getting tile at screen position."""
 	return _get_tile_index_at(screen_pos)
 
 func get_hovered_tile_safe() -> int:
-	"""Safely get hovered tile index with bounds checking"""
+	"""Safely get hovered tile index with bounds checking."""
 	if _current_hovered_index >= 0:
 		return _current_hovered_index
 	return -1

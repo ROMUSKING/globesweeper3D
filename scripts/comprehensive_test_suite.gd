@@ -486,15 +486,9 @@ func test_hud_powerup_panel():
 		test_results["hud_powerup_panel"] = test_result
 		return
 	
-	# Test UI powerup methods
-	if ui_manager.has_method("test_powerup_ui"):
-		test_result.details.append("✓ Powerup UI testing method exists")
-		
-		# This would be called to test actual UI components
-		# var ui_test_result = ui_manager.test_powerup_ui()
-		# test_result.details.append("UI test result: " + str(ui_test_result))
-	else:
-		test_result.details.append("⚠ Powerup UI testing method not found")
+	# Test UI powerup methods - test_powerup_ui was removed from production code
+	# The comprehensive test suite now handles all UI testing
+	test_result.details.append("✓ UI testing handled by comprehensive test suite")
 	
 	# Test powerup panel visibility
 	if ui_manager.has_method("show_powerup_panel"):
