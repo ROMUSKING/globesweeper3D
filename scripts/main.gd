@@ -335,6 +335,15 @@ func generate_globe():
 	tiles = result.tiles
 	hex_radius = result.hex_radius
 	performance_stats.generation_time = result.generation_time
+	
+	# Apply tile scale to all tiles
+	apply_tile_scale()
+
+func apply_tile_scale():
+	"""Applies the tile_scale export variable to all generated tiles"""
+	for tile in tiles:
+		if is_instance_valid(tile.node):
+			tile.node.scale = Vector3(tile_scale, tile_scale, tile_scale)
 
 func place_mines(excluded_tile_index: int = -1):
 	var num_mines = int(tiles.size() * mine_percentage)
@@ -1190,9 +1199,9 @@ func _on_score_updated(new_score: int, delta: int, reason: String):
 	if ui:
 		ui.update_score(new_score)
 
-func _on_high_score_updated(new_high_score: int):
+func _on_high_score_updated(new_high_score: int, difficulty_level: float):
 	"""Handle high score updates from the scoring system"""
-	print("New high score: ", new_high_score)
+	print("New high score: ", new_high_score, " at difficulty ", difficulty_level)
 	# Update UI with new high score
 	if ui:
 		ui.update_high_score(new_high_score)
