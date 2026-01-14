@@ -117,7 +117,8 @@ func play_vfx(vfx_type: String, position: Vector3, scale: float = 1.0):
 	# Configure particles based on type
 	particles.amount = config.particle_count
 	particles.lifetime = config.lifetime
-	particles.scale = config.scale * scale
+	var scale_factor = config.scale * scale
+	particles.scale = Vector3(scale_factor, scale_factor, scale_factor)
 	
 	# Add to scene and position
 	add_child(particles)

@@ -1,3 +1,4 @@
+class_name PowerupPanelController
 extends PanelContainer
 
 # Powerup Panel Controller - Handles powerup UI logic

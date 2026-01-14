@@ -1,3 +1,4 @@
+class_name SettingsMenuController
 extends Control
 
 # Settings Menu Controller - Handles settings menu UI logic
@@ -11,10 +12,10 @@ signal difficulty_rollback_requested(steps: int)
 @onready var back_button = $VBoxContainer/BackButton
 @onready var scaling_toggle = $VBoxContainer/ScalingContainer/ScalingToggle
 @onready var scaling_mode_selector = $VBoxContainer/ScalingContainer/ScalingModeSelector
-@onready var reset_difficulty_button = $VBoxContainer/ScalingContainer/ResetDifficultyButton
-@onready var rollback_difficulty_button = $VBoxContainer/ScalingContainer/RollbackDifficultyButton
-@onready var scaling_status_label = $VBoxContainer/ScalingContainer/ScalingStatusLabel
-@onready var performance_metrics_label = $VBoxContainer/ScalingContainer/PerformanceMetricsLabel
+@onready var reset_difficulty_button = $VBoxContainer/ScalingContainer/ScalingControls/ResetDifficultyButton
+@onready var rollback_difficulty_button = $VBoxContainer/ScalingContainer/ScalingControls/RollbackDifficultyButton
+@onready var scaling_status_label = $VBoxContainer/ScalingContainer/ScalingStatus/ScalingStatusLabel
+@onready var performance_metrics_label = $VBoxContainer/ScalingContainer/ScalingStatus/PerformanceMetricsLabel
 
 # Difficulty Scaling Manager reference
 var difficulty_scaling_manager: Node = null
@@ -23,6 +24,14 @@ func _ready():
 	# Connect settings menu button signals
 	if back_button:
 		back_button.pressed.connect(_on_back_button_pressed)
+	
+	# Initialize scaling mode selector items
+	if scaling_mode_selector:
+		scaling_mode_selector.clear()
+		scaling_mode_selector.add_item("Conservative")
+		scaling_mode_selector.add_item("Aggressive")
+		scaling_mode_selector.add_item("Adaptive")
+		scaling_mode_selector.add_item("Static")
 	
 	# Connect difficulty scaling signals
 	connect_difficulty_scaling_signals()

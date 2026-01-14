@@ -1,3 +1,4 @@
+class_name GameOverController
 extends Control
 
 # Game Over Controller - Handles game over screen UI logic

@@ -1,3 +1,4 @@
+class_name HUDController
 extends Control
 
 # HUD Controller - Handles heads-up display UI logic

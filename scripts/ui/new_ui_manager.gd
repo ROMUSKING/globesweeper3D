@@ -1,3 +1,4 @@
+class_name NewUIManager
 extends Control
 
 # New UI Manager - Handles scene management and signal routing

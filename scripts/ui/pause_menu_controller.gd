@@ -1,3 +1,4 @@
+class_name PauseMenuController
 extends Control
 
 # Pause Menu Controller - Handles pause menu UI logic
