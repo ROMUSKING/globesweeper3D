@@ -1183,9 +1183,9 @@ func _on_player_skill_assessed(skill_level: float, confidence: float):
 	"""Handle player skill assessment from the scaling manager"""
 	print("Player skill assessed: %.2f (confidence: %.2f)" % [skill_level, confidence])
 
-func _on_score_updated(new_score: int):
+func _on_score_updated(new_score: int, delta: int, reason: String):
 	"""Handle score updates from the scoring system"""
-	print("Score updated: ", new_score)
+	print("Score updated: ", new_score, " (", reason, ")")
 	# Update UI with new score
 	if ui:
 		ui.update_score(new_score)
