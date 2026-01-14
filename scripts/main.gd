@@ -18,12 +18,18 @@ const InteractionManagerScript = preload("res://scripts/interaction_manager.gd")
 const PowerupManagerScript = preload("res://scripts/powerup_manager.gd")
 const GameStateManagerScript = preload("res://scripts/game_state_manager.gd")
 const DifficultyScalingManagerScript = preload("res://scripts/difficulty_scaling_manager.gd")
+const ScoringSystemScript = preload("res://scripts/scoring_system.gd")
+const SoundVFXManagerScript = preload("res://scripts/sound_vfx_manager.gd")
+const VFXSystemScript = preload("res://scripts/vfx_system.gd")
 const CURSOR_SCENE = preload("res://scenes/cursor.tscn")
 var globe_generator
 var audio_manager
 var powerup_manager
 var game_state_manager
 var difficulty_scaling_manager
+var scoring_system
+var sound_vfx_manager
+var vfx_system
 var ui_scene = preload("res://scenes/ui.tscn")
 var ui
 
@@ -113,6 +119,14 @@ func _ready():
 	game_state_manager.game_resumed.connect(_on_game_resumed)
 	game_state_manager.main_menu_requested.connect(_on_main_menu_requested)
 	
+	# Initialize VFX System
+	vfx_system = VFXSystemScript.new()
+	add_child(vfx_system)
+	
+	# Initialize Sound/VFX Event Manager
+	sound_vfx_manager = SoundVFXManagerScript.new()
+	add_child(sound_vfx_manager)
+	
 	ui = ui_scene.instantiate()
 	ui.start_game_requested.connect(_on_start_game_requested)
 	ui.restart_game_requested.connect(reset_game)
@@ -122,6 +136,12 @@ func _ready():
 	ui.resume_requested.connect(_on_resume_requested)
 	ui.settings_requested.connect(_on_settings_requested)
 	ui.settings_closed.connect(_on_settings_closed)
+	ui.powerup_purchased_ui.connect(_on_powerup_purchased_ui)
+	ui.powerup_activated_ui.connect(_on_powerup_activated_ui)
+	ui.difficulty_scaling_toggled.connect(_on_difficulty_scaling_toggled)
+	ui.difficulty_scaling_mode_changed.connect(_on_difficulty_scaling_mode_changed)
+	ui.difficulty_reset_requested.connect(_on_difficulty_reset_requested)
+	ui.difficulty_rollback_requested.connect(_on_difficulty_rollback_requested)
 	add_child(ui)
 	
 	# Connect UI to Game State Manager
@@ -136,6 +156,15 @@ func _ready():
 	
 	# Inject audio manager reference into game state manager
 	game_state_manager.set_audio_manager_ref(audio_manager)
+	
+	# Initialize Sound/VFX Event Manager after audio manager is ready
+	sound_vfx_manager.initialize({
+		"audio_manager": audio_manager,
+		"vfx_system": vfx_system,
+		"game_state_machine": game_state_manager,
+		"scoring_system": game_statistics,
+		"interaction_manager": interaction_manager
+	})
 
 	# Initialize powerup manager
 	powerup_manager = PowerupManagerScript.new()
@@ -143,7 +172,7 @@ func _ready():
 	powerup_manager.set_main_script_reference(self)
 	powerup_manager.score_deducted.connect(_on_score_deducted)
 	powerup_manager.powerup_activated.connect(_on_powerup_activated)
-
+	
 	# Initialize difficulty scaling manager
 	difficulty_scaling_manager = DifficultyScalingManagerScript.new()
 	add_child(difficulty_scaling_manager)
@@ -154,7 +183,15 @@ func _ready():
 	difficulty_scaling_manager.set_game_state_manager_reference(game_state_manager)
 	difficulty_scaling_manager.difficulty_changed.connect(_on_difficulty_changed)
 	difficulty_scaling_manager.player_skill_assessed.connect(_on_player_skill_assessed)
-
+	
+	# Initialize scoring system
+	scoring_system = ScoringSystemScript.new()
+	add_child(scoring_system)
+	scoring_system.set_game_state_manager_reference(game_state_manager)
+	scoring_system.set_difficulty_scaling_manager_reference(difficulty_scaling_manager)
+	scoring_system.score_updated.connect(_on_score_updated)
+	scoring_system.high_score_updated.connect(_on_high_score_updated)
+	
 	# Initialize interaction manager
 	interaction_manager = InteractionManagerScript.new()
 	add_child(interaction_manager)
@@ -170,7 +207,10 @@ func _ready():
 	
 	# Connect interaction manager to Game State Manager
 	interaction_manager.set_game_state_manager_reference(game_state_manager)
-
+	
+	# Connect UI to powerup manager
+	ui.set_powerup_manager_reference(powerup_manager)
+	
 	# Connect UI to difficulty scaling manager
 	ui.set_difficulty_scaling_manager_reference(difficulty_scaling_manager)
 	
@@ -207,17 +247,17 @@ func _process(delta):
 				if timer_freeze_remaining <= 0.0:
 					timer_frozen = false
 					timer_freeze_remaining = 0.0
-			
+				
 			ui.update_time(format_time(game_timer))
 			
 			# Update score display
-			calculate_score()
-			ui.update_score(current_game_score)
-		
+	if scoring_system:
+		ui.update_score(scoring_system.get_current_score())
+			
 		# Update powerup manager cooldowns
 		if powerup_manager:
 			powerup_manager.update_cooldowns(delta)
-		
+			
 		update_mine_counter()
 	elif game_state_manager.is_paused():
 		# Update powerup manager cooldowns even when paused
@@ -232,8 +272,12 @@ func _process(delta):
 			cursor.global_position = tile.node.global_position
 			cursor.global_basis = tile.node.global_basis
 			cursor.translate_object_local(Vector3(0, 0.01, 0))
-	
+
 	_process_camera_feel(delta)
+	
+	# Process Sound/VFX events
+	if sound_vfx_manager:
+		sound_vfx_manager.process_events(delta)
 	
 	# Update performance stats every frame
 	update_performance_stats()
@@ -378,6 +422,22 @@ func _on_tile_clicked(index: int, button_index: int):
 	elif button_index == MOUSE_BUTTON_RIGHT:
 		var flag_success = toggle_flag(tile)
 		track_player_action("flag", flag_success, {"tile_index": index})
+		
+		# Update scoring system for flag placement
+		if scoring_system:
+			scoring_system.record_flag_placement(flag_success)
+		
+		# Trigger streak update event through Sound/VFX Event Manager
+		if scoring_system:
+			var current_streak = game_statistics.current_streak
+			var best_streak = game_statistics.best_streak
+			sound_vfx_manager.trigger_event(
+				SoundVFXEventManager.EventType.STREAK_UPDATE,
+				{
+					"new_streak": current_streak,
+					"best_streak": best_streak
+				}
+			)
 
 func _on_globe_dragged(relative: Vector2):
 	# Direct manipulation
@@ -388,10 +448,22 @@ func _on_globe_dragged(relative: Vector2):
 	
 	# Store velocity for momentum on release
 	rotation_velocity = drag_rot
+	
+	# Trigger globe rotation event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.GLOBE_ROTATION,
+		{"rotation_speed": relative.length()}
+	)
 
 func _on_zoom_changed(amount: float):
 	target_zoom += amount * 5.0
 	target_zoom = clamp(target_zoom, globe_radius * 1.2, globe_radius * 5.0)
+	
+	# Trigger zoom change event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.ZOOM_CHANGE,
+		{"zoom_level": target_zoom}
+	)
 
 func reveal_tile(tile):
 	if tile.is_revealed or tile.is_flagged:
@@ -414,8 +486,22 @@ func reveal_tile(tile):
 	if not game_started:
 		game_started = true
 		
-	# Play tile reveal sound
-	audio_manager.play_reveal_sound()
+		# Trigger first click event through Sound/VFX Event Manager
+		sound_vfx_manager.trigger_event(
+			SoundVFXEventManager.EventType.FIRST_CLICK,
+			{"position": tile.world_position}
+		)
+		
+	# Trigger tile reveal event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.TILE_REVEAL,
+		{
+			"tile_index": tile.index,
+			"has_mine": tile.has_mine,
+			"neighbor_mines": tile.neighbor_mines,
+			"position": tile.world_position
+		}
+	)
 		
 	# Animate reveal if it's a safe tile
 	if not tile.has_mine:
@@ -433,15 +519,28 @@ func reveal_tile(tile):
 		# Record game end for difficulty scaling
 		if difficulty_scaling_manager:
 			difficulty_scaling_manager.record_game_end(false, game_timer, current_game_score)
-		
+		 
+		# Update scoring system for game end
+		if scoring_system:
+			scoring_system.calculate_final_score(game_timer, false)
+			scoring_system.calculate_performance_metrics(game_timer)
+		 
 		# Trigger screen shake
 		shake_strength = 2.5
 		
-		# Play mine explosion sound
-		audio_manager.play_explosion_sound()
+		# Trigger mine explosion event through Sound/VFX Event Manager
+		sound_vfx_manager.trigger_event(
+			SoundVFXEventManager.EventType.MINE_EXPLOSION,
+			{"position": tile.world_position},
+			SoundVFXEventManager.EventPriority.HIGH
+		)
 		
-		# Play game lose sound
-		audio_manager.play_lose_sound()
+		# Trigger game lose event through Sound/VFX Event Manager
+		sound_vfx_manager.trigger_event(
+			SoundVFXEventManager.EventType.GAME_LOSE,
+			{},
+			SoundVFXEventManager.EventPriority.HIGH
+		)
 		
 		reveal_all_mines()
 		game_state_manager.end_game(false)
@@ -485,18 +584,18 @@ func chord_reveal(tile) -> bool:
 
 	# Add bonus points for successful chord reveals
 	if revealed_count > 0:
-		var difficulty_bonus = 1.0
-		match difficulty_level:
-			DifficultyLevel.EASY:
-				difficulty_bonus = 1.0
-			DifficultyLevel.MEDIUM:
-				difficulty_bonus = 1.5
-			DifficultyLevel.HARD:
-				difficulty_bonus = 2.0
-		current_game_score += int(revealed_count * 10 * difficulty_bonus)
+		# Update scoring system for chord reveal
+		if scoring_system:
+			scoring_system.record_chord_reveal(true)
 		
-	# Play chord reveal sound
-	audio_manager.play_chord_sound()
+	# Trigger chord reveal event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.CHORD_REVEAL,
+		{
+			"position": tile.world_position,
+			"tile_count": revealed_count
+		}
+	)
 	
 	return revealed_count > 0 # Success if any tiles were revealed
 
@@ -589,26 +688,35 @@ func check_win_condition():
 	if difficulty_scaling_manager:
 		difficulty_scaling_manager.record_game_end(true, game_timer, current_game_score)
 	
-	# Play game win sound
-	audio_manager.play_win_sound()
+	# Update scoring system for game end
+	if scoring_system:
+		scoring_system.calculate_final_score(game_timer, true)
+		scoring_system.calculate_performance_metrics(game_timer)
+	
+	# Trigger game win event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.GAME_WIN,
+		{
+			"current_streak": game_statistics.current_streak,
+			"current_difficulty": difficulty_level
+		},
+		SoundVFXEventManager.EventPriority.HIGH
+	)
 	
 	game_state_manager.end_game(true)
 	trigger_fireworks()
 
 func trigger_fireworks():
-	# Create several fireworks around the globe
-	var fw_root: Node3D = get_node("Fireworks")
-	if fw_root == null:
-		fw_root = Node3D.new()
-		fw_root.name = "Fireworks"
-		add_child(fw_root)
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-	var bursts := 10
-	for i in range(bursts):
-		var dir = Vector3(rng.randf_range(-1, 1), rng.randf_range(-1, 1), rng.randf_range(-1, 1)).normalized()
-		var pos = dir * (globe_radius * 1.2)
-		create_firework_at(fw_root, pos)
+	# Trigger fireworks event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.GAME_WIN,
+		{
+			"fireworks_type": "standard_fireworks",
+			"current_streak": game_statistics.current_streak,
+			"current_difficulty": difficulty_level
+		},
+		SoundVFXEventManager.EventPriority.HIGH
+	)
 
 func create_firework_at(parent: Node3D, pos: Vector3):
 	var p = GPUParticles3D.new()
@@ -788,10 +896,22 @@ func _on_game_paused():
 	"""Handle game pause"""
 	print("Game paused")
 	# Pause timer is handled in _process by checking is_paused()
+	
+	# Trigger game pause event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.GAME_PAUSE,
+		{}
+	)
 
 func _on_game_resumed():
 	"""Handle game resume"""
 	print("Game resumed")
+	
+	# Trigger game resume event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.GAME_RESUME,
+		{}
+	)
 
 func _on_main_menu_requested():
 	"""Handle main menu request"""
@@ -814,11 +934,17 @@ func _state_to_string(state) -> String:
 
 func _on_start_game_requested():
 	reset_game()
+	
+	# Trigger game start event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.GAME_START,
+		{}
+	)
 
 # Handle difficulty selection from UI
-func _on_difficulty_selected(difficulty_level: int):
+func _on_difficulty_selected(ui_difficulty_level: int):
 	# Convert UI difficulty (0,1,2) to game difficulty enum
-	match difficulty_level:
+	match ui_difficulty_level:
 		0:
 			difficulty_level = DifficultyLevel.EASY
 		1:
@@ -844,6 +970,44 @@ func _on_settings_requested():
 func _on_settings_closed():
 	"""Handle settings closed from UI"""
 	game_state_manager.close_settings()
+
+# Powerup UI Signal Handlers
+func _on_powerup_purchased_ui(powerup_type: String):
+	"""Handle powerup purchase request from UI"""
+	if powerup_manager:
+		powerup_manager.purchase_powerup(powerup_type)
+
+func _on_powerup_activated_ui(powerup_type: String):
+	"""Handle powerup activation request from UI"""
+	if powerup_manager:
+		powerup_manager.activate_powerup(powerup_type)
+
+# Difficulty Scaling UI Signal Handlers
+func _on_difficulty_scaling_toggled(enabled: bool):
+	"""Handle difficulty scaling toggle from UI"""
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.set_scaling_enabled(enabled)
+
+func _on_difficulty_scaling_mode_changed(mode: int):
+	"""Handle difficulty scaling mode change from UI"""
+	if difficulty_scaling_manager:
+		var mode_name = "ADAPTIVE"
+		match mode:
+			0: mode_name = "CONSERVATIVE"
+			1: mode_name = "AGGRESSIVE"
+			2: mode_name = "ADAPTIVE"
+			3: mode_name = "STATIC"
+		difficulty_scaling_manager.set_scaling_mode(mode_name)
+
+func _on_difficulty_reset_requested():
+	"""Handle difficulty reset request from UI"""
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.reset_difficulty()
+
+func _on_difficulty_rollback_requested(steps: int):
+	"""Handle difficulty rollback request from UI"""
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.rollback_difficulty(steps)
 
 func _on_menu_requested():
 	# Clear globe or just stop processing
@@ -1004,10 +1168,34 @@ func _on_difficulty_changed(from_level: float, to_level: float, reason: String):
 	# Update UI to reflect new difficulty
 	if ui:
 		ui.update_difficulty_display(to_level)
+	
+	# Trigger difficulty change event through Sound/VFX Event Manager
+	sound_vfx_manager.trigger_event(
+		SoundVFXEventManager.EventType.DIFFICULTY_CHANGE,
+		{
+			"new_difficulty": to_level,
+			"old_difficulty": from_level,
+			"reason": reason
+		}
+	)
 
 func _on_player_skill_assessed(skill_level: float, confidence: float):
 	"""Handle player skill assessment from the scaling manager"""
 	print("Player skill assessed: %.2f (confidence: %.2f)" % [skill_level, confidence])
+
+func _on_score_updated(new_score: int):
+	"""Handle score updates from the scoring system"""
+	print("Score updated: ", new_score)
+	# Update UI with new score
+	if ui:
+		ui.update_score(new_score)
+
+func _on_high_score_updated(new_high_score: int):
+	"""Handle high score updates from the scoring system"""
+	print("New high score: ", new_high_score)
+	# Update UI with new high score
+	if ui:
+		ui.update_high_score(new_high_score)
 
 # Difficulty Scaling Integration Methods
 func apply_difficulty_scaling_parameters():
@@ -1046,8 +1234,8 @@ func reveal_random_mine() -> Dictionary:
 	# Find unrevealed mines
 	var unrevealed_mines = []
 	for i in range(tiles.size()):
-		var tile = tiles[i]
-		if tile.has_mine and not tile.is_revealed:
+		var current_tile = tiles[i]
+		if current_tile.has_mine and not current_tile.is_revealed:
 			unrevealed_mines.append(i)
 	
 	if unrevealed_mines.is_empty():
@@ -1073,8 +1261,8 @@ func reveal_random_safe_tile() -> Dictionary:
 	# Find unrevealed safe tiles
 	var unrevealed_safe_tiles = []
 	for i in range(tiles.size()):
-		var tile = tiles[i]
-		if not tile.has_mine and not tile.is_revealed:
+		var current_tile = tiles[i]
+		if not current_tile.has_mine and not current_tile.is_revealed:
 			unrevealed_safe_tiles.append(i)
 	
 	if unrevealed_safe_tiles.is_empty():
@@ -1166,7 +1354,7 @@ func reveal_tile_with_protection_check(tile) -> bool:
 		return not tile.has_mine # Return true if safe tile, false if mine
 
 # Additional powerup integration methods
-func activate_powerup_from_ui(powerup_type: String, target_index: int = -1):
+func activate_powerup_from_ui(powerup_type: String, _target_index: int = -1):
 	"""Public method to activate powerups from UI"""
 	if powerup_manager and powerup_manager.can_activate_powerup(powerup_type):
 		var result = powerup_manager.activate_powerup(powerup_type)

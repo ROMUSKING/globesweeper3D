@@ -33,6 +33,8 @@ Main.gd (Game Orchestrator)
 ├── GlobeGenerator (Geometry & Mesh Generation)
 ├── InteractionManager (Input & Raycasting)
 ├── AudioManager (Procedural Audio Synthesis)
+├── SoundVFXManager (Unified Event & Effect Management)
+├── VFXSystem (Particle & Visual Effects)
 ├── PowerupManager (Powerup Inventory & Activation)
 ├── GameStateManager (State Machine & Flow Control)
 ├── DifficultyScalingManager (Adaptive Difficulty)
@@ -65,6 +67,8 @@ Main.gd (Game Orchestrator)
 | `scripts/powerup_manager.gd` | Powerup inventory, costs, activation logic | `POWERUP_DEFINITIONS`, cooldown management |
 | `scripts/difficulty_scaling_manager.gd` | Adaptive difficulty, performance tracking | `ScalingMode`, performance thresholds |
 | `scripts/audio_manager.gd` | Procedural audio synthesis, multi-channel management | `SAMPLE_RATE = 22050`, `AudioStreamGenerator` |
+| `scripts/sound_vfx_manager.gd` | Event dispatching, audio/VFX coordination | `EventType` enum, `EventPriority` levels |
+| `scripts/vfx_system.gd` | Particle effects, visual feedback rendering | VFX types, intensity scaling |
 | `scripts/ui/ui_manager.gd` | UI state management, visual feedback | Signal connections, HUD updates |
 | `shaders/tile.gdshader` | Visual state rendering | `u_state` uniform (0-6) |
 
@@ -96,6 +100,14 @@ Main.gd (Game Orchestrator)
 - **Sample rate**: 22050 Hz (optimized for performance)
 - **Buffer management**: Careful with `push_frame()` to avoid underflows/overflows
 - **Audio glitch prevention**: Always call `play()` before `get_stream_playback()`
+
+### Sound/VFX Event System
+- **Unified architecture**: `SoundVFXManager` coordinates all audio and visual events
+- **Event types**: `TILE_REVEAL`, `TILE_FLAG`, `MINE_EXPLOSION`, `GAME_WIN`, `GAME_LOSE`, `CHORD_REVEAL`, etc.
+- **Event priority**: `LOW` (background), `MEDIUM` (standard), `HIGH` (critical), `IMMEDIATE` (system)
+- **Trigger flow**: Main detects action → `sound_vfx_manager.trigger_event(type, position)` → audio plays + VFX triggers
+- **Intensity scaling**: VFX system responds to `vfx_intensity` and `master_volume` parameters
+- **Configuration**: Enable/disable via `sound_enabled`, `vfx_enabled` exports
 
 ### Visual State Management
 **Shader `u_state` values:**

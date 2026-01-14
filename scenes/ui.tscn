@@ -1,6 +1,6 @@
 [gd_scene load_steps=7 format=3 uid="uid://bvk7w4xgtg7qj"]
 
-[ext_resource type="Script" uid="uid://ui_manager" path="res://scripts/ui/ui_manager.gd" id="1_uimanager"]
+[ext_resource type="Script" uid="uid://new_ui_manager" path="res://scripts/ui/new_ui_manager.gd" id="1_newuimanager"]
 [ext_resource type="PackedScene" uid="uid://mainmenu_scene_id" path="res://scenes/ui/MainMenu.tscn" id="2_mainmenu"]
 [ext_resource type="PackedScene" uid="uid://hud_scene_id" path="res://scenes/ui/HUD.tscn" id="3_hud"]
 [ext_resource type="PackedScene" uid="uid://gameover_scene_id" path="res://scenes/ui/GameOver.tscn" id="4_gameover"]
@@ -14,7 +14,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_uimanager")
+script = ExtResource("1_newuimanager")
 
 [node name="MainMenu" parent="." instance=ExtResource("2_mainmenu")]
 layout_mode = 1

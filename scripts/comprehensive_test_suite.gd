@@ -10,6 +10,7 @@ var game_state_manager: Node = null
 var powerup_manager: Node = null
 var difficulty_scaling_manager: Node = null
 var ui_manager: Node = null
+var new_ui_manager: Node = null
 var interaction_manager: Node = null
 
 # Test results storage
@@ -42,6 +43,7 @@ func find_game_system_references():
 	var ui_node = current_scene.find_child("UI", true, false)
 	if ui_node:
 		ui_manager = ui_node
+		new_ui_manager = ui_node
 
 func run_all_tests():
 	"""Run all test categories"""
@@ -1160,6 +1162,7 @@ func test_missing_references():
 		"Powerup Manager": powerup_manager,
 		"Difficulty Scaling Manager": difficulty_scaling_manager,
 		"UI Manager": ui_manager,
+		"New UI Manager": new_ui_manager,
 		"Interaction Manager": interaction_manager
 	}
 	

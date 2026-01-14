@@ -4,6 +4,11 @@
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_xcygt")
+difficulty_level = null
+globe_radius = null
+subdivision_level = null
+mine_percentage = null
+tile_scale = null
 
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 30)

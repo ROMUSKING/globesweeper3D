@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://dsettingsmenu"]
 
-[ext_resource type="Script" uid="uid://ui_manager" path="res://scripts/ui/ui_manager.gd" id="1_ui_manager"]
+[ext_resource type="Script" uid="uid://settings_menu_controller" path="res://scripts/ui/settings_menu_controller.gd" id="1_settings_menu_controller"]
 
 [node name="SettingsMenu" type="Control"]
 layout_mode = 3
@@ -9,7 +9,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_ui_manager")
+script = ExtResource("1_settings_menu_controller")
 
 [node name="Background" type="ColorRect" parent="."]
 layout_mode = 1

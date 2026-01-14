@@ -13,6 +13,18 @@
 			],
 			"group": "build",
 			"problemMatcher": []
+		},
+		{
+			"label": "Validate Godot Project",
+			"type": "shell",
+			"command": "Godot_v4.4.1-stable_win64_console.exe",
+			"args": [
+				"--path",
+				".",
+				"--headless",
+				"--check-only"
+			],
+			"problemMatcher": []
 		}
 	]
 }
