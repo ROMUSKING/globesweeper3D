@@ -6,6 +6,19 @@ GlobeSweeper 3D is a fully functional 3D Minesweeper game implemented in Godot 4
 
 ## Architecture
 
+### Recent Updates (January 2026)
+
+#### Parser Error Resolution
+
+**Critical fixes to resolve loading issues:**
+
+- **Type Hint Fixes**: Added `class_name AudioManager` to resolve "Could not find type" errors
+- **Scene File Corrections**: Added missing nodes to `HUD.tscn` and `SettingsMenu.tscn`
+- **Code Quality**: Fixed indentation, variable shadowing, and unused variables
+- **Signal Handlers**: Added missing implementations for score update signals
+
+**Impact**: All parser errors resolved, project now loads correctly in Godot Editor
+
 ### Core Components
 
 #### Main.gd (881 lines)

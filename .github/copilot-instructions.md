@@ -279,6 +279,24 @@ func run_new_feature_tests():
 - **Visual feedback**: Use shader state for immediate visual response
 - **Powerup UI**: Update availability based on score and cooldowns
 
+### Type Hint Issues
+- **Missing class_name declarations**: All manager scripts must have `class_name` declarations for type hints to work
+- **Scene file parsing errors**: Missing or incorrect type hints can cause scene files to fail loading
+- **Circular dependencies**: Ensure all type hints reference valid classes with proper declarations
+- **HUD scene structure**: Complex UI scenes require all referenced nodes to exist in the scene hierarchy
+
+### Common Parser Errors
+- **"Could not find type X in current scope"**: Add `class_name X` to the script file
+- **"Parse error in scene file"**: Check for missing nodes or incorrect parent paths
+- **"Node not found"**: Verify scene hierarchy matches @onready variable paths
+
+### Recent Issues & Solutions
+For a complete list of parser errors encountered and their fixes, see `PARSER_ERROR_FIXES.md` in the project root. This includes:
+- AudioManager type resolution
+- Scene file loading issues
+- Missing signal handlers
+- Indentation and variable shadowing fixes
+
 ## 🔧 Debugging & Performance
 
 ### Debug Tools
@@ -340,6 +358,14 @@ Before making changes or creating PRs:
 - [ ] Audio triggers at appropriate times
 - [ ] Difficulty scaling adjusts properly
 
+### Parser Validation
+- [ ] All scripts have `class_name` declarations if used as type hints
+- [ ] Scene files can load without parse errors
+- [ ] No "Could not find type in current scope" errors
+- [ ] All @onready paths match actual scene hierarchy
+- [ ] No variable shadowing issues
+- [ ] All signal handlers are implemented
+
 ## 🎯 Quick Reference Examples
 
 ### Example 1: Adding a New Tile State
@@ -353,6 +379,36 @@ const STATE_NEW = 7.0
 # In main.gd or manager
 tile.set_state(STATE_NEW)
 material.set_shader_parameter("u_state", STATE_NEW)
+```
+
+### Example 2: Fixing Parser Errors
+```gdscript
+# Problem: "Could not find type AudioManager in current scope"
+# Solution: Add class_name declaration to audio_manager.gd
+
+# Before:
+extends Node
+
+# After:
+class_name AudioManager
+extends Node
+
+# Then all type hints like this will work:
+var audio_manager: AudioManager
+```
+
+### Example 3: Scene File Node Paths
+```gdscript
+# Problem: "Node not found" errors in @onready variables
+# Solution: Verify scene hierarchy matches paths
+
+# In settings_menu_controller.gd:
+@onready var scaling_toggle = $VBoxContainer/ScalingContainer/ScalingToggle
+
+# Must exist in scenes/ui/SettingsMenu.tscn:
+# [node name="VBoxContainer" type="VBoxContainer" parent="."]
+#   [node name="ScalingContainer" type="Container" parent="VBoxContainer"]
+#     [node name="ScalingToggle" type="CheckButton" parent="VBoxContainer/ScalingContainer"]
 ```
 
 ### Example 2: New Powerup Implementation

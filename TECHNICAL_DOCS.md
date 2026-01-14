@@ -21,6 +21,54 @@
 - Dynamic sound effect generation using `AudioStreamGenerator`
 - Tile reveal, explosion, win, and lose sound algorithms
 - Real-time audio synthesis without external files
+- **Class name**: `AudioManager` (required for type hints)
+
+**InteractionManager.gd** - Input handling system
+
+- Raycast-based tile selection
+- Mouse and touch input processing
+- Drag detection for globe rotation
+- Zoom functionality
+- **Class name**: `InteractionManager`
+
+**SoundVFXManager.gd** - Event coordination system
+
+- Unified event dispatching for audio and visual effects
+- Coordinates between AudioManager and VFXSystem
+- Event queue processing with priorities
+- **Class name**: `SoundVFXEventManager`
+
+**VFXSystem.gd** - Visual effects system
+
+- Particle effects (fireworks, explosions)
+- Screen shake and camera effects
+- **Class name**: `VFXSystem`
+
+**PowerupManager.gd** - Powerup system
+
+- Inventory management
+- Purchase and activation logic
+- Cooldown tracking
+- **Class name**: `PowerupManager`
+
+**GameStateManager.gd** - State machine system
+
+- Game state transitions (MENU, PLAYING, PAUSED, GAME_OVER, VICTORY)
+- State validation and persistence
+- **Class name**: `GameStateManager`
+
+**DifficultyScalingManager.gd** - Adaptive difficulty system
+
+- Performance monitoring
+- Dynamic difficulty adjustment
+- **Class name**: `DifficultyScalingManager`
+
+**ScoringSystem.gd** - Scoring and statistics system
+
+- Score calculation
+- Performance metrics
+- High score tracking
+- **Class name**: `ScoringSystem`
 
 **UI.gd** - User interface management
 
@@ -33,6 +81,30 @@
 - `RefCounted` class representing a single tile's state
 - Properties for index, position, mine status, revelation, and neighbors
 - References to visual nodes and meshes
+- **Class name**: `Tile`
+
+## Type Hint System
+
+All manager scripts now have proper `class_name` declarations, enabling type hints throughout the codebase:
+
+```gdscript
+# Example usage in main.gd
+var audio_manager: AudioManager
+var interaction_manager: InteractionManager
+var powerup_manager: PowerupManager
+var game_state_manager: GameStateManager
+var difficulty_scaling_manager: DifficultyScalingManager
+var scoring_system: ScoringSystem
+var sound_vfx_manager: SoundVFXEventManager
+var vfx_system: VFXSystem
+```
+
+This ensures:
+
+- Better IDE support and autocomplete
+- Compile-time type checking
+- Clearer code documentation
+- Easier refactoring
 
 ## Key Algorithms
 

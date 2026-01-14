@@ -55,6 +55,45 @@ text = "Video Settings (Coming Soon)"
 layout_mode = 2
 text = "Control Settings (Coming Soon)"
 
+[node name="ScalingContainer" type="VBoxContainer" parent="VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ScalingTitle" type="Label" parent="VBoxContainer/ScalingContainer"]
+layout_mode = 2
+text = "Difficulty Scaling"
+horizontal_alignment = 1
+
+[node name="ScalingToggle" type="CheckButton" parent="VBoxContainer/ScalingContainer"]
+layout_mode = 2
+text = "Enable Scaling"
+
+[node name="ScalingModeSelector" type="OptionButton" parent="VBoxContainer/ScalingContainer"]
+layout_mode = 2
+text = "Mode: Adaptive"
+
+[node name="ScalingStatus" type="VBoxContainer" parent="VBoxContainer/ScalingContainer"]
+layout_mode = 2
+
+[node name="ScalingStatusLabel" type="Label" parent="VBoxContainer/ScalingContainer/ScalingStatus"]
+layout_mode = 2
+text = "Status: Ready"
+
+[node name="PerformanceMetricsLabel" type="Label" parent="VBoxContainer/ScalingContainer/ScalingStatus"]
+layout_mode = 2
+text = "Metrics: N/A"
+
+[node name="ScalingControls" type="HBoxContainer" parent="VBoxContainer/ScalingContainer"]
+layout_mode = 2
+
+[node name="ResetDifficultyButton" type="Button" parent="VBoxContainer/ScalingContainer/ScalingControls"]
+layout_mode = 2
+text = "Reset"
+
+[node name="RollbackDifficultyButton" type="Button" parent="VBoxContainer/ScalingContainer/ScalingControls"]
+layout_mode = 2
+text = "Rollback"
+
 [node name="BackButton" type="Button" parent="VBoxContainer"]
 layout_mode = 2
 text = "Back"
