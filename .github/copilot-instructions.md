@@ -2,6 +2,10 @@
 
 This guide helps AI coding agents get productive quickly in this Godot 4.4.1 project. Follow these instructions carefully to avoid breaking existing functionality.
 
+## 🎯 Project Overview
+
+GlobeSweeper 3D is a unique 3D implementation of the classic Minesweeper game featuring spherical gameplay on an icosphere geometry. The project features fully procedural geometry and audio generation, eliminating the need for external assets. It is designed for cross-platform compatibility with touch support.
+
 ## 🚀 Quick Start Commands
 
 ### Development Workflow
@@ -23,6 +27,13 @@ Godot_v4.4.1-stable_win64_console.exe --path . --script res://scripts/difficulty
 - **"Run Godot Project"**: Headless validation with `--check-only`
 - **F12**: Toggle performance overlay (in running game)
 
+### Project Structure
+The project follows a modular architecture with clear separation of concerns:
+- `scenes/`: Contains all scene files (main.tscn, ui.tscn, and UI component scenes)
+- `scripts/`: Contains all GDScript files organized by system
+- `shaders/`: Contains shader files for visual effects
+- `ui/`: Contains UI controller scripts
+
 ## 🏗 Architecture Overview
 
 ### Core System Architecture
@@ -38,8 +49,17 @@ Main.gd (Game Orchestrator)
 ├── PowerupManager (Powerup Inventory & Activation)
 ├── GameStateManager (State Machine & Flow Control)
 ├── DifficultyScalingManager (Adaptive Difficulty)
+├── ScoringSystem (Game Scoring & Metrics)
 └── UIManager (UI State & Visual Feedback)
 ```
+
+### Data Flow Pattern
+1. **Input** → `InteractionManager` → emits `tile_clicked(index, button)`
+2. **Main** → handles click → calls `reveal_tile()` or `flag_tile()`
+3. **Game State** → validates state transitions → updates UI
+4. **Audio** → receives events → generates procedural sound
+5. **Difficulty** → monitors performance → adjusts parameters
+6. **Scoring** → tracks metrics → updates UI and difficulty scaling
 
 ### Data Flow Pattern
 1. **Input** → `InteractionManager` → emits `tile_clicked(index, button)`
@@ -54,6 +74,9 @@ Main.gd (Game Orchestrator)
 - **Procedural Audio**: No external audio files; all sounds synthesized via `AudioStreamGenerator`
 - **Mesh Reuse**: Shared hex/pent meshes for performance optimization
 - **State-Driven Visuals**: Shader `u_state` uniform controls all tile appearance
+- **First-Click Safety**: First click always reveals a safe area, not just a single tile
+- **Adaptive Difficulty**: Dynamic difficulty adjustment based on player performance metrics
+- **Scoring System**: Comprehensive scoring with efficiency, streaks, and performance metrics
 
 ## 🔍 Where to Look First (Fast Path)
 
@@ -69,14 +92,16 @@ Main.gd (Game Orchestrator)
 | `scripts/audio_manager.gd` | Procedural audio synthesis, multi-channel management | `SAMPLE_RATE = 22050`, `AudioStreamGenerator` |
 | `scripts/sound_vfx_manager.gd` | Event dispatching, audio/VFX coordination | `EventType` enum, `EventPriority` levels |
 | `scripts/vfx_system.gd` | Particle effects, visual feedback rendering | VFX types, intensity scaling |
+| `scripts/scoring_system.gd` | Game scoring, metrics, and high scores | Scoring algorithms, performance metrics |
 | `scripts/ui/ui_manager.gd` | UI state management, visual feedback | Signal connections, HUD updates |
-| `shaders/tile.gdshader` | Visual state rendering | `u_state` uniform (0-6) |
+| `shaders/tile.gdshader` | Visual state rendering | `u_state` uniform (0-8) |
 
 ### Quick Navigation Guide
 - **Game Loop**: `main.gd` → `_ready()` → `generate_globe()` → game state transitions
 - **Input Flow**: `interaction_manager.gd` → `_physics_process()` → raycast → signals
 - **Audio Flow**: `audio_manager.gd` → event listeners → `AudioStreamGenerator` → `push_frame()`
 - **State Flow**: `game_state_manager.gd` → `change_state()` → validation → signals
+- **Scoring Flow**: `scoring_system.gd` → tracks metrics → updates UI and difficulty
 
 ## 🎯 Project-Specific Conventions
 
