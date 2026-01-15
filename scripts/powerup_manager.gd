@@ -218,65 +218,75 @@ func activate_powerup(powerup_type: String) -> Dictionary:
 
 func execute_powerup_effect(powerup_type: String) -> Dictionary:
 	"""
-	Executes the specific effect of a powerup
-	Returns effect-specific data
+	Executes the specific effect of a powerup.
+	Consolidated dispatcher using method calling and helper for reduced boilerplate.
+	
+	Args:
+		powerup_type: Type of powerup to execute
+	
+	Returns: Dictionary with effect-specific data
 	"""
-	match powerup_type:
-		"reveal_protection":
-			return activate_reveal_protection()
-		"reveal_mine":
-			return activate_reveal_mine()
-		"reveal_safe_tile":
-			return activate_reveal_safe_tile()
-		"hint_system":
-			return activate_hint_system()
-		"time_freeze":
-			return activate_time_freeze()
-		_:
-			return {"error": "Unknown powerup type"}
+	var handler_name = "_effect_" + powerup_type
+	if has_method(handler_name):
+		return call(handler_name)
+	
+	return {"error": "Unknown powerup type: " + powerup_type}
 
-func activate_reveal_protection() -> Dictionary:
-	# Add protection state to main script
+# Helper to reduce boilerplate for main script method calls
+func _call_main_method(method_name: String, args: Array = []) -> Dictionary:
+	"""Helper to call main script methods safely"""
+	if not main_script or not main_script.has_method(method_name):
+		return {"success": false, "error": "Method not available"}
+	
+	if args.is_empty():
+		return main_script.call(method_name)
+	else:
+		return main_script.call(method_name, args)
+
+# Powerup effect handlers - private with _effect prefix
+func _effect_reveal_protection() -> Dictionary:
 	if main_script and main_script.has_method("add_reveal_protection"):
 		main_script.add_reveal_protection()
 	
-	# Track powerup use for difficulty scaling
 	if difficulty_scaling_manager:
 		difficulty_scaling_manager.record_player_action("powerup_use", true, {
 			"type": "reveal_protection",
 			"action": "activate",
-			"needed": true # Protection is always "needed" when used
+			"needed": true
 		})
 	
 	return {"protection_count": 1}
 
-func activate_reveal_mine() -> Dictionary:
-	# Automatically reveal a mine location
-	if main_script and main_script.has_method("reveal_random_mine"):
-		var mine_data = main_script.reveal_random_mine()
-		return mine_data
-	return {"revealed": false}
+func _effect_reveal_mine() -> Dictionary:
+	return _call_main_method("reveal_random_mine")
 
-func activate_reveal_safe_tile() -> Dictionary:
-	# Automatically reveal a safe tile
-	if main_script and main_script.has_method("reveal_random_safe_tile"):
-		var tile_data = main_script.reveal_random_safe_tile()
-		return tile_data
-	return {"revealed": false}
+func _effect_reveal_safe_tile() -> Dictionary:
+	return _call_main_method("reveal_random_safe_tile")
 
-func activate_hint_system() -> Dictionary:
-	# Show safe tiles around a specific area
-	if main_script and main_script.has_method("show_hints"):
-		var hint_data = main_script.show_hints()
-		return hint_data
-	return {"hints_shown": 0}
+func _effect_hint_system() -> Dictionary:
+	return _call_main_method("show_hints")
 
-func activate_time_freeze() -> Dictionary:
-	# Pause timer for 30 seconds
+func _effect_time_freeze() -> Dictionary:
 	if main_script and main_script.has_method("freeze_timer"):
 		main_script.freeze_timer(30.0)
 		return {"freeze_duration": 30.0}
 	return {"freeze_duration": 0.0}
+
+# Legacy compatibility - can remove after testing
+func activate_reveal_protection() -> Dictionary:
+	return _effect_reveal_protection()
+
+func activate_reveal_mine() -> Dictionary:
+	return _effect_reveal_mine()
+
+func activate_reveal_safe_tile() -> Dictionary:
+	return _effect_reveal_safe_tile()
+
+func activate_hint_system() -> Dictionary:
+	return _effect_hint_system()
+
+func activate_time_freeze() -> Dictionary:
+	return _effect_time_freeze()
 
 func update_cooldowns(delta: float):
 	"""Updates all powerup cooldowns and active powerup durations.

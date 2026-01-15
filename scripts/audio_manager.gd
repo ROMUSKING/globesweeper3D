@@ -1,145 +1,92 @@
 class_name AudioManager
 extends Node
 
-# Audio players
-var background_player: AudioStreamPlayer
-var reveal_player: AudioStreamPlayer
-var explosion_player: AudioStreamPlayer
-var win_player: AudioStreamPlayer
-var lose_player: AudioStreamPlayer
-var click_player: AudioStreamPlayer
-var chord_player: AudioStreamPlayer
+# Audio player configuration: [node_name, buffer_length]
+const AUDIO_PLAYERS = {
+	"background_player": ["BackgroundMusic", 10.0],
+	"reveal_player": ["RevealSound", 0.1],
+	"explosion_player": ["ExplosionSound", 0.3],
+	"win_player": ["WinSound", 0.8],
+	"lose_player": ["LoseSound", 0.8],
+	"click_player": ["ClickSound", 0.05],
+	"chord_player": ["ChordSound", 0.2],
+	"flag_player": ["FlagSound", 0.1],
+	"game_start_player": ["GameStartSound", 0.5],
+	"game_pause_player": ["GamePauseSound", 0.2],
+	"game_resume_player": ["GameResumeSound", 0.2],
+	"difficulty_change_player": ["DifficultyChangeSound", 0.3],
+	"streak_player": ["StreakSound", 0.2],
+	"globe_rotate_player": ["GlobeRotateSound", 0.1],
+	"zoom_player": ["ZoomSound", 0.15],
+}
 
-# Additional sound players for new event types
-var flag_player: AudioStreamPlayer
-var game_start_player: AudioStreamPlayer
-var game_pause_player: AudioStreamPlayer
-var game_resume_player: AudioStreamPlayer
-var difficulty_change_player: AudioStreamPlayer
-var streak_player: AudioStreamPlayer
-var globe_rotate_player: AudioStreamPlayer
-var zoom_player: AudioStreamPlayer
+# Audio players (dynamically created)
+var _players: Dictionary = {}
 
 # Constants
 const SAMPLE_RATE = 22050
 
 func _ready():
 	_setup_audio_nodes()
-	_setup_streams()
 
 func _setup_audio_nodes():
-	background_player = _create_player("BackgroundMusic")
-	reveal_player = _create_player("RevealSound")
-	explosion_player = _create_player("ExplosionSound")
-	win_player = _create_player("WinSound")
-	lose_player = _create_player("LoseSound")
-	click_player = _create_player("ClickSound")
-	chord_player = _create_player("ChordSound")
-	flag_player = _create_player("FlagSound")
-	game_start_player = _create_player("GameStartSound")
-	game_pause_player = _create_player("GamePauseSound")
-	game_resume_player = _create_player("GameResumeSound")
-	difficulty_change_player = _create_player("DifficultyChangeSound")
-	streak_player = _create_player("StreakSound")
-	globe_rotate_player = _create_player("GlobeRotateSound")
-	zoom_player = _create_player("ZoomSound")
+	"""Create all audio players dynamically from configuration"""
+	for var_name in AUDIO_PLAYERS.keys():
+		var config = AUDIO_PLAYERS[var_name]
+		var node_name = config[0]
+		var buffer_length = config[1]
+		
+		# Create player
+		var player = AudioStreamPlayer.new()
+		player.name = node_name
+		add_child(player)
+		
+		# Setup stream
+		var stream = AudioStreamGenerator.new()
+		stream.mix_rate = SAMPLE_RATE
+		stream.buffer_length = buffer_length
+		player.stream = stream
+		
+		# Store reference
+		_players[var_name] = player
 
-func _create_player(node_name: String) -> AudioStreamPlayer:
-	var player = AudioStreamPlayer.new()
-	player.name = node_name
-	add_child(player)
-	return player
+# Dynamic accessor for players (backward compatibility)
+func _get(property: StringName) -> Variant:
+	if _players.has(property):
+		return _players[property]
+	return null
 
-func _setup_streams():
-	# Tile reveal
-	var reveal_stream = AudioStreamGenerator.new()
-	reveal_stream.mix_rate = SAMPLE_RATE
-	reveal_stream.buffer_length = 0.1
-	reveal_player.stream = reveal_stream
-
-	# Mine explosion
-	var explosion_stream = AudioStreamGenerator.new()
-	explosion_stream.mix_rate = SAMPLE_RATE
-	explosion_stream.buffer_length = 0.3
-	explosion_player.stream = explosion_stream
-
-	# Game win
-	var win_stream = AudioStreamGenerator.new()
-	win_stream.mix_rate = SAMPLE_RATE
-	win_stream.buffer_length = 0.8
-	win_player.stream = win_stream
-
-	# Game lose
-	var lose_stream = AudioStreamGenerator.new()
-	lose_stream.mix_rate = SAMPLE_RATE
-	lose_stream.buffer_length = 0.8
-	lose_player.stream = lose_stream
-
-	# Click sound
-	var click_stream = AudioStreamGenerator.new()
-	click_stream.mix_rate = SAMPLE_RATE
-	click_stream.buffer_length = 0.05
-	click_player.stream = click_stream
-	
-	# Chord sound
-	var chord_stream = AudioStreamGenerator.new()
-	chord_stream.mix_rate = SAMPLE_RATE
-	chord_stream.buffer_length = 0.2
-	chord_player.stream = chord_stream
-
-	# Flag sound
-	var flag_stream = AudioStreamGenerator.new()
-	flag_stream.mix_rate = SAMPLE_RATE
-	flag_stream.buffer_length = 0.1
-	flag_player.stream = flag_stream
-
-	# Game start sound
-	var game_start_stream = AudioStreamGenerator.new()
-	game_start_stream.mix_rate = SAMPLE_RATE
-	game_start_stream.buffer_length = 0.5
-	game_start_player.stream = game_start_stream
-
-	# Game pause sound
-	var game_pause_stream = AudioStreamGenerator.new()
-	game_pause_stream.mix_rate = SAMPLE_RATE
-	game_pause_stream.buffer_length = 0.2
-	game_pause_player.stream = game_pause_stream
-
-	# Game resume sound
-	var game_resume_stream = AudioStreamGenerator.new()
-	game_resume_stream.mix_rate = SAMPLE_RATE
-	game_resume_stream.buffer_length = 0.2
-	game_resume_player.stream = game_resume_stream
-
-	# Difficulty change sound
-	var difficulty_stream = AudioStreamGenerator.new()
-	difficulty_stream.mix_rate = SAMPLE_RATE
-	difficulty_stream.buffer_length = 0.3
-	difficulty_change_player.stream = difficulty_stream
-
-	# Streak sound
-	var streak_stream = AudioStreamGenerator.new()
-	streak_stream.mix_rate = SAMPLE_RATE
-	streak_stream.buffer_length = 0.2
-	streak_player.stream = streak_stream
-
-	# Globe rotate sound
-	var globe_rotate_stream = AudioStreamGenerator.new()
-	globe_rotate_stream.mix_rate = SAMPLE_RATE
-	globe_rotate_stream.buffer_length = 0.1
-	globe_rotate_player.stream = globe_rotate_stream
-
-	# Zoom sound
-	var zoom_stream = AudioStreamGenerator.new()
-	zoom_stream.mix_rate = SAMPLE_RATE
-	zoom_stream.buffer_length = 0.15
-	zoom_player.stream = zoom_stream
-
-	# Background music (Placeholder based on original code)
-	var bg_stream = AudioStreamGenerator.new()
-	bg_stream.mix_rate = SAMPLE_RATE
-	bg_stream.buffer_length = 10.0
-	background_player.stream = bg_stream
+# Backward compatibility properties
+var background_player: AudioStreamPlayer:
+	get: return _players.get("background_player", null)
+var reveal_player: AudioStreamPlayer:
+	get: return _players.get("reveal_player", null)
+var explosion_player: AudioStreamPlayer:
+	get: return _players.get("explosion_player", null)
+var win_player: AudioStreamPlayer:
+	get: return _players.get("win_player", null)
+var lose_player: AudioStreamPlayer:
+	get: return _players.get("lose_player", null)
+var click_player: AudioStreamPlayer:
+	get: return _players.get("click_player", null)
+var chord_player: AudioStreamPlayer:
+	get: return _players.get("chord_player", null)
+var flag_player: AudioStreamPlayer:
+	get: return _players.get("flag_player", null)
+var game_start_player: AudioStreamPlayer:
+	get: return _players.get("game_start_player", null)
+var game_pause_player: AudioStreamPlayer:
+	get: return _players.get("game_pause_player", null)
+var game_resume_player: AudioStreamPlayer:
+	get: return _players.get("game_resume_player", null)
+var difficulty_change_player: AudioStreamPlayer:
+	get: return _players.get("difficulty_change_player", null)
+var streak_player: AudioStreamPlayer:
+	get: return _players.get("streak_player", null)
+var globe_rotate_player: AudioStreamPlayer:
+	get: return _players.get("globe_rotate_player", null)
+var zoom_player: AudioStreamPlayer:
+	get: return _players.get("zoom_player", null)
 
 func play_reveal_sound():
 	if not reveal_player.stream:

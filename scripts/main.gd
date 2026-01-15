@@ -237,7 +237,11 @@ func _ready():
 	load_game_statistics()
 
 func _process(delta):
-	if game_state_manager.is_playing():
+	# Only update game systems if playing or paused (reduce unnecessary checks)
+	var is_playing = game_state_manager.is_playing()
+	var is_paused = game_state_manager.is_paused()
+	
+	if is_playing:
 		if game_started:
 			# Handle timer freeze - timer only advances when not frozen and not paused
 			if not timer_frozen:
@@ -247,26 +251,24 @@ func _process(delta):
 				if timer_freeze_remaining <= 0.0:
 					timer_frozen = false
 					timer_freeze_remaining = 0.0
-				
+			
 			ui.update_time(format_time(game_timer))
-			
-			# Update score display
-	if scoring_system:
-		ui.update_score(scoring_system.get_current_score())
-			
-		# Update powerup manager cooldowns
+		
+		# Update score display and cooldowns once per frame (moved inside is_playing block)
+		if scoring_system:
+			ui.update_score(scoring_system.get_current_score())
+		
 		if powerup_manager:
 			powerup_manager.update_cooldowns(delta)
-			
+		
 		update_mine_counter()
-	elif game_state_manager.is_paused():
+	elif is_paused:
 		# Update powerup manager cooldowns even when paused
 		if powerup_manager:
 			powerup_manager.update_cooldowns(delta)
-		# Timer doesn't advance when paused
 	
-	# Update cursor position to follow rotating tile
-	if hovered_tile_index != -1 and hovered_tile_index < tiles.size():
+	# Update cursor position to follow rotating tile (early exit if no valid hover)
+	if hovered_tile_index >= 0 and hovered_tile_index < tiles.size():
 		var tile = tiles[hovered_tile_index]
 		if is_instance_valid(tile.node):
 			cursor.global_position = tile.node.global_position
@@ -339,6 +341,15 @@ func generate_globe():
 	# Apply tile scale to all tiles
 	apply_tile_scale()
 
+# Utility function for filtering tiles by condition
+func filter_tiles(condition: Callable) -> Array:
+	"""Returns array of tile indices matching the condition callback"""
+	var filtered = []
+	for i in range(tiles.size()):
+		if condition.call(tiles[i]):
+			filtered.append(i)
+	return filtered
+
 func apply_tile_scale():
 	"""Applies the tile_scale export variable to all generated tiles"""
 	for tile in tiles:
@@ -359,17 +370,20 @@ func place_mines(excluded_tile_index: int = -1):
 			for second_level_neighbor_idx in tiles[neighbor_idx].neighbors:
 				excluded_indices[second_level_neighbor_idx] = true
 	
+	# Collect available tiles more efficiently
 	for i in range(tiles.size()):
-		if not i in excluded_indices:
+		if i not in excluded_indices:
 			available_tiles.append(i)
 	
 	available_tiles.shuffle()
 	
+	# Place mines up to the limit
 	var mines_to_place = min(num_mines, available_tiles.size())
 	for i in range(mines_to_place):
 		tiles[available_tiles[i]].has_mine = true
 
 func calculate_neighbor_counts():
+	# Efficiently calculate neighbor mine counts
 	for tile in tiles:
 		if not tile.has_mine:
 			var count = 0
@@ -379,22 +393,26 @@ func calculate_neighbor_counts():
 			tile.neighbor_mines = count
 
 func update_mine_counter():
+	# Calculate total mines and flagged count efficiently
 	var total_mines = 0
+	var flagged_count = 0
 	
 	if not mines_placed:
 		# If mines aren't placed yet, use the theoretical count
 		total_mines = int(tiles.size() * mine_percentage)
 	else:
+		# Count actual mines and flags in a single pass
 		for tile in tiles:
 			if tile.has_mine:
 				total_mines += 1
+			if tile.is_flagged:
+				flagged_count += 1
 	
-	var flagged_count = 0
-	for tile in tiles:
-		if tile.is_flagged:
-			flagged_count += 1
-	
-	ui.update_mines(total_mines - flagged_count)
+	# Only update UI if not yet placed (avoid redundant flag count)
+	if not mines_placed:
+		ui.update_mines(total_mines)
+	else:
+		ui.update_mines(total_mines - flagged_count)
 
 func _input(event):
 	# Handle debug keys and pause
@@ -778,26 +796,20 @@ func clear_fireworks():
 			c.queue_free()
 
 func apply_difficulty_settings():
-	# Adjust game parameters based on selected difficulty level
-	match difficulty_level:
-		DifficultyLevel.EASY:
-			globe_radius = 15.0
-			subdivision_level = 2
-			mine_percentage = 0.10
-			tile_scale = 2.2 # Larger tiles for fewer tiles
-			
-		DifficultyLevel.MEDIUM:
-			globe_radius = 20.0
-			subdivision_level = 3
-			mine_percentage = 0.15
-			tile_scale = 1.8 # Standard tile scale
-			
-		DifficultyLevel.HARD:
-			globe_radius = 25.0
-			subdivision_level = 4
-			mine_percentage = 0.20
-			tile_scale = 1.2 # Smaller tiles for more tiles
-		
+	# Difficulty configuration: [globe_radius, subdivision_level, mine_percentage, tile_scale]
+	var difficulty_config = {
+		DifficultyLevel.EASY: [15.0, 2, 0.10, 1.2],
+		DifficultyLevel.MEDIUM: [20.0, 3, 0.15, 0.8],
+		DifficultyLevel.HARD: [25.0, 4, 0.20, 0.6],
+	}
+	
+	if difficulty_config.has(difficulty_level):
+		var config = difficulty_config[difficulty_level]
+		globe_radius = config[0]
+		subdivision_level = config[1]
+		mine_percentage = config[2]
+		tile_scale = config[3]
+	
 	# Update camera zoom based on globe radius
 	target_zoom = globe_radius * 3
 	current_zoom = target_zoom
@@ -807,28 +819,28 @@ func calculate_score():
 	# Calculate score based on various factors
 	var base_score = 100
 	var time_bonus = max(0, 1000 - int(game_timer * 10)) # Max 1000 points for speed
-	var efficiency_bonus = 0
 	
+	# Efficiency bonus: max 500 points
+	var efficiency_bonus = 0
 	if total_safe_tiles > 0:
 		var efficiency = float(safe_tiles_revealed) / float(total_safe_tiles)
-		efficiency_bonus = int(efficiency * 500) # Max 500 points for efficiency
+		efficiency_bonus = int(efficiency * 500)
 	
+	# Flag accuracy bonus: max 300 points
 	var flag_accuracy_bonus = 0
 	if flags_used > 0:
 		var flag_accuracy = float(correct_flags) / float(flags_used)
-		flag_accuracy_bonus = int(flag_accuracy * 300) # Max 300 points for flag accuracy
+		flag_accuracy_bonus = int(flag_accuracy * 300)
 	
-	var streak_bonus = game_statistics.current_streak * 50 # 50 points per streak
+	# Streak bonus: 50 points per streak
+	var streak_bonus = game_statistics.current_streak * 50
 	
-	# Difficulty multiplier
-	var difficulty_multiplier = 1.0
-	match difficulty_level:
-		DifficultyLevel.EASY:
-			difficulty_multiplier = 0.8
-		DifficultyLevel.MEDIUM:
-			difficulty_multiplier = 1.0
-		DifficultyLevel.HARD:
-			difficulty_multiplier = 1.2
+	# Difficulty multiplier based on selected level
+	var difficulty_multiplier = {
+		DifficultyLevel.EASY: 0.8,
+		DifficultyLevel.MEDIUM: 1.0,
+		DifficultyLevel.HARD: 1.2,
+	}.get(difficulty_level, 1.0)
 	
 	current_game_score = int((base_score + time_bonus + efficiency_bonus + flag_accuracy_bonus + streak_bonus) * difficulty_multiplier)
 	
@@ -1195,16 +1207,16 @@ func _on_player_skill_assessed(skill_level: float, confidence: float):
 	"""Handle player skill assessment from the scaling manager"""
 	print("Player skill assessed: %.2f (confidence: %.2f)" % [skill_level, confidence])
 
-func _on_score_updated(new_score: int, delta: int, reason: String):
+func _on_score_updated(new_score: int, _delta: int, reason: String):
 	"""Handle score updates from the scoring system"""
 	print("Score updated: ", new_score, " (", reason, ")")
 	# Update UI with new score
 	if ui:
 		ui.update_score(new_score)
 
-func _on_high_score_updated(new_high_score: int, difficulty_level: float):
+func _on_high_score_updated(new_high_score: int, diff_level: float):
 	"""Handle high score updates from the scoring system"""
-	print("New high score: ", new_high_score, " at difficulty ", difficulty_level)
+	print("New high score: ", new_high_score, " at difficulty ", diff_level)
 	# Update UI with new high score
 	if ui:
 		ui.update_high_score(new_high_score)
@@ -1243,20 +1255,14 @@ func add_reveal_protection():
 	print("Reveal protection added. Total protections: ", reveal_protection_count)
 
 func reveal_random_mine() -> Dictionary:
-	# Find unrevealed mines
-	var unrevealed_mines = []
-	for i in range(tiles.size()):
-		var current_tile = tiles[i]
-		if current_tile.has_mine and not current_tile.is_revealed:
-			unrevealed_mines.append(i)
+	# Find unrevealed mines efficiently using filter utility
+	var unrevealed_mines = filter_tiles(func(t): return t.has_mine and not t.is_revealed)
 	
 	if unrevealed_mines.is_empty():
 		return {"revealed": false, "message": "No unrevealed mines found"}
 	
-	# Randomly select a mine to reveal
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-	var mine_index = unrevealed_mines[rng.randi_range(0, unrevealed_mines.size() - 1)]
+	# Randomly select a mine to reveal (reuse RNG instead of creating new)
+	var mine_index = unrevealed_mines[randi() % unrevealed_mines.size()]
 	var tile = tiles[mine_index]
 	
 	# Reveal the mine with special visual indication
@@ -1266,24 +1272,17 @@ func reveal_random_mine() -> Dictionary:
 		mat.set_shader_parameter("u_state", 4.0) # Powerup revealed mine
 	add_number_to_tile(tile, "💣")
 	
-	print("Mine revealed at index: ", mine_index)
 	return {"revealed": true, "mine_index": mine_index, "position": tile.world_position}
 
 func reveal_random_safe_tile() -> Dictionary:
-	# Find unrevealed safe tiles
-	var unrevealed_safe_tiles = []
-	for i in range(tiles.size()):
-		var current_tile = tiles[i]
-		if not current_tile.has_mine and not current_tile.is_revealed:
-			unrevealed_safe_tiles.append(i)
+	# Find unrevealed safe tiles efficiently using filter utility
+	var unrevealed_safe_tiles = filter_tiles(func(t): return not t.has_mine and not t.is_revealed)
 	
 	if unrevealed_safe_tiles.is_empty():
 		return {"revealed": false, "message": "No unrevealed safe tiles found"}
 	
 	# Randomly select a safe tile to reveal
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-	var safe_index = unrevealed_safe_tiles[rng.randi_range(0, unrevealed_safe_tiles.size() - 1)]
+	var safe_index = unrevealed_safe_tiles[randi() % unrevealed_safe_tiles.size()]
 	var tile = tiles[safe_index]
 	
 	# Reveal the safe tile
@@ -1405,3 +1404,30 @@ func reset_powerup_state():
 	timer_freeze_remaining = 0.0
 	if powerup_manager:
 		powerup_manager.reset_inventory()
+# Resource cleanup and management
+func _exit_tree():
+	"""Called when node is freed - cleanup resources and disconnect signals"""
+	# Disconnect all signals to prevent orphaned connections
+	if game_state_manager:
+		game_state_manager.state_changed.disconnect(_on_game_state_changed)
+		game_state_manager.state_entered.disconnect(_on_game_state_entered)
+		game_state_manager.game_paused.disconnect(_on_game_paused)
+		game_state_manager.game_resumed.disconnect(_on_game_resumed)
+		game_state_manager.main_menu_requested.disconnect(_on_main_menu_requested)
+	
+	if interaction_manager:
+		interaction_manager.tile_clicked.disconnect(_on_tile_clicked)
+		interaction_manager.tile_hovered.disconnect(_on_tile_hovered)
+	
+	if powerup_manager:
+		powerup_manager.powerup_activated.disconnect(_on_powerup_activated)
+		powerup_manager.score_deducted.disconnect(_on_score_deducted)
+	
+	if difficulty_scaling_manager:
+		difficulty_scaling_manager.difficulty_changed.disconnect(_on_difficulty_changed)
+	
+	if scoring_system:
+		scoring_system.score_updated.disconnect(_on_score_updated)
+	
+	# Clear tiles array
+	tiles.clear()
