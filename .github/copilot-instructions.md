@@ -109,8 +109,10 @@ Main.gd (Game Orchestrator)
 - **Icosphere Algorithm**: Start with icosahedron → subdivide faces → project to sphere → convert to hexagons
 - **First 12 vertices are pentagons** (icosahedron vertices), rest are hexagons
 - **Subdivision levels**: 2=42 tiles, 3=162 tiles, 4=642 tiles, 5=2562 tiles
-- **Tile positioning**: Inward offset (3.0 units) to hide sphere interior
+- **Tile positioning**: Inward offset (1.0 unit) to hide sphere interior
+- **Tile scaling**: Automatically adjusted per difficulty (EASY: 2.2, MEDIUM: 1.8, HARD: 1.2)
 - **Mesh caching**: `shared_hex_mesh` and `shared_pent_mesh` prevent redundant generation
+- **Hex radius**: Calculated dynamically based on actual vertex spacing to prevent overlap
 
 ### Input & Interaction
 - **Left-click**: Reveal tile (if hidden)
@@ -133,6 +135,22 @@ Main.gd (Game Orchestrator)
 - **Trigger flow**: Main detects action → `sound_vfx_manager.trigger_event(type, position)` → audio plays + VFX triggers
 - **Intensity scaling**: VFX system responds to `vfx_intensity` and `master_volume` parameters
 - **Configuration**: Enable/disable via `sound_enabled`, `vfx_enabled` exports
+
+### VFX System Details
+**VFX Types & Configurations** (in `vfx_system.gd`):
+- `tile_reveal`: 20 particles, 0.5s lifetime, blue, scale 0.3
+- `tile_reveal_mine`: 30 particles, 0.8s lifetime, red-orange, scale 0.5
+- `flag_placed`: 15 particles, 0.3s lifetime, yellow, scale 0.2
+- `flag_removed`: 10 particles, 0.2s lifetime, cyan, scale 0.15
+- `mine_explosion`: 100 particles, 1.0s lifetime, red-orange, scale 1.5
+- `standard_fireworks`: 200 particles, 1.8s lifetime, white, scale 1.0
+- `advanced_fireworks`: 400 particles, 2.5s lifetime, yellow, scale 1.8
+- `mega_fireworks`: 800 particles, 3.0s lifetime, multi-color, scale 2.0+
+
+**Particle System Pattern**:
+- Called from SoundVFXManager when events occur
+- Particles spawn at position with duration based on config
+- Intensity multiplier scales particle count and lifetime for different game states
 
 ### Visual State Management
 **Shader `u_state` values:**
@@ -178,15 +196,72 @@ VICTORY → MENU (return to menu)
 
 **Activation flow**: Purchase → deduct score → activate → immediate effect or timed duration
 
+### UI Controller Architecture
+The UI system uses a **modular controller pattern** with dedicated controllers for each screen:
+- **main_menu_controller.gd**: Menu navigation and difficulty selection
+- **hud_controller.gd**: In-game HUD (timer, score, mines counter)
+- **pause_menu_controller.gd**: Pause state with resume/quit options
+- **game_over_controller.gd**: Game over screen with stats and restart
+- **settings_menu_controller.gd**: Settings including difficulty scaling toggle
+- **powerup_panel_controller.gd**: Powerup UI with availability and cooldowns
+
+**Signal Pattern**: Controllers emit signals (e.g., `start_game_requested`, `pause_requested`) → Main connects and handles → No direct method calls for loose coupling
+
 ### Difficulty Scaling
 **Scaling Modes:**
-- `CONSERVATIVE`: Small, gradual adjustments
-- `AGGRESSIVE`: Fast progression for skilled players
-- `ADAPTIVE`: Balances challenge and accessibility
-- `STATIC`: Traditional fixed difficulty
+- `CONSERVATIVE`: Small, gradual adjustments (±0.1 per game)
+- `AGGRESSIVE`: Fast progression for skilled players (±0.2 per game)
+- `ADAPTIVE`: Balances challenge and accessibility (±0.15 per game)
+- `STATIC`: Traditional fixed difficulty (no scaling)
+
+**Difficulty Range**: 0.5 (easiest) to 2.0 (hardest), default 1.0
 
 **Performance tracking**: Efficiency, speed, error rate, streaks, powerup dependency
-**Adjustment triggers**: Based on 80% efficiency threshold or 30% error rate
+
+**Adjustment Logic**:
+- Increases difficulty: 80%+ efficiency and <30% error rate
+- Decreases difficulty: <60% efficiency or >40% error rate
+- Tracks performance over 10 games (adaptation window)
+- Scaling history maintained for rollback capability
+
+**Difficulty-Specific Tile Scaling**:
+- **EASY** (subdivision 2): 42 tiles, globe_radius 15.0, tile_scale 2.2
+- **MEDIUM** (subdivision 3): 162 tiles, globe_radius 20.0, tile_scale 1.8
+- **HARD** (subdivision 4): 642 tiles, globe_radius 25.0, tile_scale 1.2
+
+Tile scale is automatically adjusted to maintain visual consistency and prevent overlap across difficulty levels. Larger scales on easier difficulties and smaller scales on harder difficulties ensure tiles remain visually distinct and playable.
+
+## 🎯 Scoring System Architecture
+
+**Metrics Tracked** (in `scoring_system.gd`):
+- **Efficiency Score**: correct_moves / total_moves (target: 80%+)
+- **Speed Performance**: game_timer / expected_time (faster is better)
+- **Error Rate**: mistakes / total_moves (target: <30%)
+- **Streak Performance**: Consecutive correct moves bonus
+- **Powerup Dependency**: Reliance on powerups (lower is better)
+
+**Scoring Formula Example**:
+```
+base_score = safe_tiles_revealed * 10
+efficiency_bonus = (correct_moves / total_moves) * 50
+speed_bonus = (1.0 - game_timer / time_limit) * 30
+streak_bonus = current_streak * 5
+final_score = base + efficiency + speed + streak
+```
+
+**Game Result System** (`game_result.gd`):
+RefCounted wrapper capturing game outcome data:
+- `victory`: bool
+- `game_time`: float
+- `tiles_revealed`: int
+- `mines_flagged`: int
+- `final_score`: int
+- `efficiency`: float
+- `error_rate`: float
+- `streak_length`: int
+- `powerups_used`: int
+
+Used by difficulty scaling manager to track performance history and make scaling decisions.
 
 ## 🧪 Testing & Validation
 

@@ -784,16 +784,19 @@ func apply_difficulty_settings():
 			globe_radius = 15.0
 			subdivision_level = 2
 			mine_percentage = 0.10
+			tile_scale = 2.2  # Larger tiles for fewer tiles
 			
 		DifficultyLevel.MEDIUM:
 			globe_radius = 20.0
 			subdivision_level = 3
 			mine_percentage = 0.15
+			tile_scale = 1.8  # Standard tile scale
 			
 		DifficultyLevel.HARD:
 			globe_radius = 25.0
 			subdivision_level = 4
 			mine_percentage = 0.20
+			tile_scale = 1.2  # Smaller tiles for more tiles
 		
 	# Update camera zoom based on globe radius
 	target_zoom = globe_radius * 3
