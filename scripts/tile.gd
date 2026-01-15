@@ -112,3 +112,47 @@ func clone() -> Tile:
 	new_tile.neighbors = neighbors.duplicate()
 	# Note: node and mesh are not copied as they are scene-specific
 	return new_tile
+
+func cleanup():
+	"""Explicit cleanup method for resource management"""
+	# Clear references to prevent memory leaks
+	if node:
+		if node.is_inside_tree():
+			node.queue_free()
+		node = null
+	
+	if mesh:
+		if mesh.is_inside_tree():
+			mesh.queue_free()
+		mesh = null
+	
+	# Reset all properties to default values
+	has_mine = false
+	neighbor_mines = 0
+	is_revealed = false
+	is_flagged = false
+	is_powerup_revealed = false
+	is_hint_highlighted = false
+	protection_active = false
+	
+	if neighbors:
+		neighbors.clear()
+	
+	# Log cleanup for debugging
+	_log_cleanup("Tile cleanup completed for index: " + str(index))
+
+func _log_cleanup(message: String):
+	"""Log cleanup information for debugging"""
+	var timestamp = Time.get_unix_time_from_system()
+	var log_message = "[CLEANUP] [%s] %s" % [timestamp, message]
+	print(log_message)
+	
+	# Log to persistent log if available
+	if has_method("_log_to_persistent_log"):
+		_log_to_persistent_log(log_message)
+
+func _log_to_persistent_log(_message: String):
+	"""Log message to persistent storage if available"""
+	# Placeholder for persistent logging implementation
+	# Could be implemented to write to a file or database
+	pass

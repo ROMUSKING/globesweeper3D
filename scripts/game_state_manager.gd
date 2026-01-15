@@ -247,8 +247,8 @@ func close_settings() -> bool:
 func go_back() -> bool:
 	"""Navigate back using state history"""
 	if state_history.size() > 0:
-		var previous_state = state_history.pop_back()
-		return change_state(previous_state, "Navigate back")
+		var _previous_state = state_history.pop_back()
+		return change_state(_previous_state, "Navigate back")
 	return false
 
 # State validation and query methods
@@ -365,7 +365,12 @@ func get_state_debug_info() -> Dictionary:
 		"valid_transitions": valid_transitions.get(current_state, []).map(func(state): return get_state_name(state)),
 		"can_interact": can_interact(),
 		"can_show_ui": can_show_ui(),
-		"auto_pause_enabled": false
+		"auto_pause_enabled": false,
+		"state_data": state_data,
+		"paused_game_data": paused_game_data,
+		"state_entry_times": state_entry_times,
+		"debug_logging_enabled": debug_logging_enabled,
+		"state_persistence_enabled": state_persistence_enabled
 	}
 
 func print_debug_info():
@@ -382,7 +387,22 @@ func _log_state_change(from_state: GameState, to_state: GameState, reason: Strin
 		var message = "State change: %s -> %s" % [get_state_name(from_state), get_state_name(to_state)]
 		if reason != "":
 			message += " (%s)" % reason
-		print(message)
+		
+		# Add timestamp and additional context
+		var timestamp = Time.get_unix_time_from_system()
+		var _state_context = {
+			"from_state": from_state,
+			"to_state": to_state,
+			"reason": reason,
+			"timestamp": timestamp
+		}
+		
+		var full_message = "[%s] %s" % [timestamp, message]
+		print(full_message)
+		
+		# Log to persistent log if available
+		if has_method("_log_to_persistent_log"):
+			_log_to_persistent_log(full_message)
 
 func _log_error(message: String, stack_trace: String = "", context: Dictionary = {}):
 	"""Log error messages with detailed context for debugging"""
@@ -391,7 +411,16 @@ func _log_error(message: String, stack_trace: String = "", context: Dictionary =
 		error_message += "\nStack Trace: %s" % stack_trace
 	if not context.is_empty():
 		error_message += "\nContext: %s" % str(context)
+	
+	# Add timestamp for better debugging
+	var timestamp = Time.get_unix_time_from_system()
+	error_message = "[%s] %s" % [timestamp, error_message]
+	
 	print(error_message)
+	
+	# Also log to a persistent error log if available
+	if has_method("_log_to_persistent_log"):
+		_log_to_persistent_log(error_message)
 
 func _log_debug_info(info_type: String, data: Variant):
 	"""Log detailed debug information for complex scenarios"""
@@ -399,6 +428,10 @@ func _log_debug_info(info_type: String, data: Variant):
 		var timestamp = Time.get_unix_time_from_system()
 		var log_message = "[DEBUG] [%s] %s: %s" % [timestamp, info_type, str(data)]
 		print(log_message)
+		
+		# Log to persistent debug log if available
+		if has_method("_log_to_persistent_log"):
+			_log_to_persistent_log(log_message)
 
 func _play_state_transition_sound(sound_type: String):
 	"""Play audio feedback for state transitions"""
@@ -429,6 +462,12 @@ func _exit_tree():
 	valid_transitions.clear()
 	
 	_log_debug_info("Cleanup", {"message": "GameStateManager resources cleaned up"})
+
+func _log_to_persistent_log(_message: String):
+	"""Log message to persistent storage if available"""
+	# Placeholder for persistent logging implementation
+	# Could be implemented to write to a file or database
+	pass
 
 ## Sets the AudioManager reference for dependency injection.
 ## Call this from main.gd after AudioManager is ready to remove scene tree coupling.

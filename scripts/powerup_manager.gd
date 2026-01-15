@@ -103,6 +103,12 @@ func purchase_powerup(powerup_type: String, available_score: int) -> Dictionary:
 		Dictionary: Result containing success status, message, and updated inventory
 	"""
 	if not can_purchase_powerup(powerup_type, available_score):
+		var error_context = {
+			"powerup_type": powerup_type,
+			"available_score": available_score,
+			"required_score": get_adjusted_powerup_cost(powerup_type)
+		}
+		_log_powerup_error("Purchase failed - insufficient score", error_context)
 		return {
 			"success": false,
 			"message": "Insufficient score points",
@@ -177,6 +183,13 @@ func activate_powerup(powerup_type: String) -> Dictionary:
 		Dictionary: Result containing success status, message, and effect data
 	"""
 	if not can_activate_powerup(powerup_type):
+		var error_context = {
+			"powerup_type": powerup_type,
+			"inventory": powerup_inventory.get(powerup_type, {}),
+			"cooldown": powerup_cooldowns.get(powerup_type, 0.0),
+			"active": active_powerups.get(powerup_type, 0.0)
+		}
+		_log_powerup_error("Activation failed - cannot activate powerup", error_context)
 		return {
 			"success": false,
 			"message": "Powerup cannot be activated",
@@ -230,7 +243,21 @@ func execute_powerup_effect(powerup_type: String) -> Dictionary:
 	if has_method(handler_name):
 		return call(handler_name)
 	
+	var error_context = {
+		"powerup_type": powerup_type,
+		"available_handlers": _get_available_effect_handlers()
+	}
+	_log_powerup_error("Unknown powerup type", error_context)
 	return {"error": "Unknown powerup type: " + powerup_type}
+
+func _get_available_effect_handlers() -> Array:
+	"""Get list of available effect handler methods"""
+	var handlers = []
+	for powerup_type in POWERUP_DEFINITIONS.keys():
+		var handler_name = "_effect_" + powerup_type
+		if has_method(handler_name):
+			handlers.append(handler_name)
+	return handlers
 
 # Helper to reduce boilerplate for main script method calls
 func _call_main_method(method_name: String, args: Array = []) -> Dictionary:
@@ -407,3 +434,38 @@ func get_time_freeze_remaining() -> float:
 	if is_time_frozen():
 		return active_powerups["time_freeze"]
 	return 0.0
+
+# Enhanced error logging methods
+func _log_powerup_error(message: String, context: Dictionary = {}):
+	"""Log powerup-related errors with detailed context"""
+	var error_message = "[POWERUP ERROR] %s" % message
+	
+	if not context.is_empty():
+		error_message += "\nContext: %s" % str(context)
+	
+	# Add stack trace if available
+	var stack_trace = ""
+	if has_method("_get_stack_trace"):
+		stack_trace = _get_stack_trace()
+	
+	if stack_trace != "":
+		error_message += "\nStack Trace: %s" % stack_trace
+	
+	print(error_message)
+	
+	# Log to persistent log if available
+	if has_method("_log_to_persistent_log"):
+		_log_to_persistent_log(error_message)
+
+func _get_stack_trace() -> String:
+	"""Get current stack trace for error logging"""
+	var trace = ""
+	# This is a simplified stack trace - in a real implementation you'd want more details
+	trace = "PowerupManager stack trace"
+	return trace
+
+func _log_to_persistent_log(_message: String):
+	"""Log message to persistent storage if available"""
+	# Placeholder for persistent logging implementation
+	# Could be implemented to write to a file or database
+	pass

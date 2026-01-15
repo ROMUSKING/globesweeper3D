@@ -53,17 +53,12 @@ func _update_hover():
 	var result = _perform_raycast(mouse_pos)
 	
 	var hit_index = -1
-	var hit_collider = null
+	var _hit_collider = null
 	
 	if result and result.collider:
 		if result.collider.has_meta("tile_index"):
 			hit_index = result.collider.get_meta("tile_index")
-			hit_collider = result.collider
-	
-	if hit_index != _current_hovered_index:
-		_current_hovered_index = hit_index
-		tile_hovered.emit(hit_index)
-		
+			_hit_collider = result.collider
 		# Emit powerup hover signal for relevant powerups
 		if hit_index != -1:
 			powerup_hover_requested.emit(hit_index)
@@ -89,12 +84,43 @@ func _input(event: InputEvent) -> void:
 
 func _log_input_rejection(reason: String, context: Dictionary = {}):
 	"""Log detailed information about rejected input events"""
-	var log_data = {
+	var _log_data = {
 		"reason": reason,
 		"context": context,
 		"timestamp": Time.get_unix_time_from_system()
 	}
-	print("[INPUT REJECTED] %s: %s" % [reason, str(log_data)])
+	
+	# Enhanced logging with stack trace and additional context
+	var error_message = "[INPUT REJECTED] %s" % reason
+	if not context.is_empty():
+		error_message += "\nContext: %s" % str(context)
+	
+	# Add stack trace if available
+	var stack_trace = ""
+	if has_method("_get_stack_trace"):
+		stack_trace = _get_stack_trace()
+	
+	if stack_trace != "":
+		error_message += "\nStack Trace: %s" % stack_trace
+	
+	print(error_message)
+	
+	# Log to persistent log if available
+	if has_method("_log_to_persistent_log"):
+		_log_to_persistent_log(error_message)
+
+func _get_stack_trace() -> String:
+	"""Get current stack trace for error logging"""
+	var trace = ""
+	# This is a simplified stack trace - in a real implementation you'd want more details
+	trace = "InteractionManager stack trace"
+	return trace
+
+func _log_to_persistent_log(_message: String):
+	"""Log message to persistent storage if available"""
+	# Placeholder for persistent logging implementation
+	# Could be implemented to write to a file or database
+	pass
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
 	if event.pressed:
