@@ -2,6 +2,20 @@
 
 This guide helps AI coding agents get productive quickly in this Godot 4.4.1 project. Follow these instructions carefully to avoid breaking existing functionality.
 
+## Table of Contents
+- 🎯 Project Overview
+- 🚀 Quick Start Commands
+- 🏗 Architecture Overview
+- 🔍 Where to Look First
+- 🎓 Modern Best Practices
+- 🧪 Testing & Validation
+- 📋 Pre-Commit Checklist
+- 🔧 Debugging & Performance
+- 📚 Additional Resources
+
+
+**Last updated:** 2026-01-15
+
 ## 🎯 Project Overview
 
 GlobeSweeper 3D is a unique 3D implementation of the classic Minesweeper game featuring spherical gameplay on an icosphere geometry. The project features fully procedural geometry and audio generation, eliminating the need for external assets. It is designed for cross-platform compatibility with touch support.
@@ -575,3 +589,622 @@ func test_performance():
 - Performance optimization strategies
 - Architecture decision rationales
 - Integration patterns for new components
+
+---
+
+## 🎓 Modern Best Practices for Godot & Game Development
+
+This section documents contemporary best practices based on official Godot 4.4.1 documentation and proven game development patterns. These practices enhance code quality, maintainability, and performance.
+
+### Godot Architecture Principles
+
+#### Loose Coupling & Dependency Injection
+**Problem**: Hard-coded node references create cascading failures and reduce reusability.
+
+**Solution**: Use signals for inter-system communication and dependency injection patterns.
+
+\```gdscript
+# ❌ Tight coupling - avoid
+extends Node
+func _ready():
+    var audio = get_node("AudioManager")
+    audio.play_sound("reveal")  # Direct call creates hard dependency
+
+# ✅ Loose coupling - prefer
+extends Node
+signal reveal_requested
+
+func _ready():
+    reveal_requested.connect(audio_manager.play_reveal_sound)
+    emit_signal("reveal_requested")  # Decoupled signal communication
+```
+**Benefits**: 
+- Systems can be tested in isolation
+- Easy to swap implementations
+- Reusable across projects
+- Resilient to refactoring
+
+#### Single Responsibility Principle (SRP)
+**Definition**: Each script should have one reason to change.
+
+\```gdscript
+# ❌ Violates SRP - handles too many responsibilities
+class_name GameManager
+extends Node
+
+func _process(delta):
+    update_score()  # Scoring logic
+    update_physics()  # Physics logic
+    update_audio()  # Audio logic
+    update_ui()  # UI logic
+
+# ✅ Follows SRP - each system has one job
+class_name ScoringSystem
+extends Node
+signal score_changed(new_score: int)
+
+func add_points(amount: int):
+    score += amount
+    score_changed.emit(score)
+```
+**Benefits**:
+- Easier to understand and maintain
+- Simpler to test and debug
+- Reduced side effects
+- Better code reuse
+
+#### Encapsulation & Data Hiding
+**Principle**: Hide internal implementation details; expose only necessary interfaces.
+
+\```gdscript
+# ❌ Exposes internal state - allow external modification
+class_name Player
+extends Node3D
+
+var health: int = 100  # Anyone can modify this directly
+
+# ✅ Protects internal state with accessors
+class_name Player
+extends Node3D
+
+var health: int = 100
+signal health_changed(new_health: int)
+
+func take_damage(amount: int):
+    health = max(0, health - amount)
+    health_changed.emit(health)
+
+func heal(amount: int):
+    health = min(100, health + amount)
+    health_changed.emit(health)
+```
+**Benefits**:
+- Prevents invalid state
+- Allows validation before state changes
+- Simplifies refactoring internal implementation
+- Clear API contract
+
+#### SOLID Principles in Godot
+
+**Single Responsibility**: Each manager handles one domain (audio, UI, state, etc.)
+
+**Open/Closed**: Design systems to be extended via inheritance or composition, not modification.
+
+\```gdscript
+# Base powerup class - open for extension
+class_name Powerup
+extends RefCounted
+
+var name: String
+var cost: int
+signal activated(powerup: Powerup)
+
+func activate():
+    activated.emit(self)
+```
+**Liskov Substitution**: Subclasses must be usable wherever their parent is expected.
+
+\```gdscript
+# All powerups can be used the same way
+class_name MineRevealPowerup
+extends Powerup
+
+func _init():
+    name = "Mine Reveal"
+    cost = 75
+```
+**Interface Segregation**: Create focused, minimal interfaces.
+
+\```gdscript
+# Don't make one manager interface that does everything
+# ❌ Too broad
+class_name Manager
+func start(), stop(), pause(), resume(), reset()
+
+# ✅ Focused interfaces
+class_name AudioManager
+extends Node
+signal audio_ready
+
+func play_sound(event: String):
+    pass
+```
+**Dependency Inversion**: Depend on abstractions, not concrete implementations.
+
+\```gdscript
+# ✅ Depend on signal interface, not specific AudioManager
+signal reveal_tile
+signal flag_tile
+# Connect to any system that wants to handle these
+```
+### GDScript Code Quality Standards
+
+#### Type Hints for Safety & Performance
+Type hints enable IDE autocompletion and compile-time error detection.
+
+\```gdscript
+# ❌ No type information - harder to understand
+extends Node
+
+func process_tiles(tiles):
+    for tile in tiles:
+        reveal_tile(tile)
+
+# ✅ Clear type information
+extends Node
+
+func process_tiles(tiles: Array[Tile]) -> void:
+    for tile in tiles:
+        reveal_tile(tile)
+
+# Complex return types
+func get_tile_stats() -> Dictionary[String, int]:
+    return {"flagged": flag_count, "revealed": reveal_count}
+
+# Callable types for signals/callbacks
+var on_complete: Callable = func(): pass
+```
+**Type Hints Checklist**:
+- ✅ All function parameters
+- ✅ Return types
+- ✅ Class variables (especially public ones)
+- ✅ Signal parameter types
+- ✅ Dictionary and Array element types
+
+#### Naming Conventions
+Follow consistent naming for clarity and IDE completion.
+
+\```gdscript
+class_name TileManager  # PascalCase for classes
+
+const MAX_TILES = 100  # UPPER_SNAKE_CASE for constants
+const TILE_OFFSET = Vector3(1.0, 0.0, 0.0)
+
+var is_playing: bool  # snake_case for variables
+var current_score: int
+
+func reveal_tile(tile_index: int) -> void:  # snake_case for methods
+    pass
+
+func _on_tile_clicked(index: int) -> void:  # _on_ prefix for signal handlers
+    reveal_tile(index)
+
+var _internal_cache: Dictionary  # _prefix for private variables
+```
+**Signal Naming**:
+\```gdscript
+signal tile_revealed  # Past tense for events that happened
+signal state_changed
+signal game_started
+signal score_updated(new_score: int)
+
+# Handler method names
+func _on_tile_revealed(index: int):
+    pass
+```
+#### Documentation Standards
+Clear documentation helps future maintainers (including your future self).
+
+\```gdscript
+## Reveals a tile on the globe.
+## 
+## This method handles the complete reveal flow including:
+## - Validation that tile is hidden
+## - Mine check and cascade reveal
+## - Audio and visual feedback
+## - Difficulty scaling adjustments
+##
+## [param tile_index]: The index of the tile to reveal (0-based)
+## [return]: true if reveal was successful, false if invalid state
+func reveal_tile(tile_index: int) -> bool:
+    pass
+
+## Signal emitted when a tile is successfully revealed.
+## Provides the tile index and whether it contained a mine.
+signal tile_revealed(index: int, has_mine: bool)
+
+## Configuration for difficulty scaling behavior.
+## Determines how aggressively the game adjusts difficulty.
+enum ScalingMode {
+    CONSERVATIVE,  # Small adjustments
+    AGGRESSIVE,    # Fast progression  
+    ADAPTIVE,      # Balanced approach
+    STATIC         # No scaling
+}
+```
+### Performance Best Practices
+
+#### Caching & Lookups
+Cache computed values instead of recalculating every frame.
+
+\```gdscript
+# ❌ Inefficient - recalculates every frame
+extends Node
+
+var tiles: Array[Tile]
+
+func _process(_delta):
+    var hex_tiles = tiles.filter(func(t): return t.is_hex)
+    # ... do something with hex_tiles
+
+# ✅ Efficient - cache the filtered result
+extends Node
+
+var tiles: Array[Tile]
+var _hex_tiles_cache: Array[Tile] = []
+var _cache_dirty: bool = true
+
+func _ready():
+    for tile in tiles:
+        tile.state_changed.connect(_on_tile_state_changed)
+
+func _on_tile_state_changed():
+    _cache_dirty = true
+
+func _process(_delta):
+    if _cache_dirty:
+        _hex_tiles_cache = tiles.filter(func(t): return t.is_hex)
+        _cache_dirty = false
+    
+    # Use cached result
+    for tile in _hex_tiles_cache:
+        process_tile(tile)
+```
+#### Efficient Loops & Filtering
+Write loops that terminate early and avoid unnecessary iterations.
+
+\```gdscript
+# ❌ Inefficient - iterates entire array even after finding target
+func find_tile(target_index: int) -> Tile:
+    for tile in tiles:
+        if tile.index == target_index:
+            return tile
+    return null
+
+# ✅ Efficient - uses direct lookup with validation
+func find_tile(target_index: int) -> Tile:
+    if target_index < 0 or target_index >= tiles.size():
+        return null
+    return tiles[target_index]
+
+# Better for large collections: use Dictionary
+var tiles_by_index: Dictionary[int, Tile] = {}
+
+func find_tile(target_index: int) -> Tile:
+    return tiles_by_index.get(target_index)
+```
+#### Memory Management with RefCounted
+Use RefCounted for automatic memory cleanup.
+
+\```gdscript
+# ❌ Manual cleanup required
+class_name GameSession
+extends Node
+
+func _exit_tree():
+    # Must manually disconnect signals
+    tile_revealed.disconnect(on_tile_reveal)
+
+# ✅ Automatic cleanup with RefCounted
+class_name GameResult
+extends RefCounted
+
+var victory: bool
+var score: int
+signal processed
+
+# Automatically freed when no references exist
+# No manual cleanup needed
+```
+### Signal-Driven Architecture
+
+#### Proper Signal Usage
+Signals enable decoupling and event-driven design.
+
+\```gdscript
+# ✅ Good signal patterns in GlobeSweeper
+class_name AudioManager
+extends Node
+
+# Clear, specific signals for different events
+signal reveal_sound_requested(position: Vector3)
+signal explosion_requested(intensity: float)
+signal background_music_changed(track: String)
+
+func trigger_event(event_type: String, position: Vector3):
+    match event_type:
+        "tile_reveal":
+            reveal_sound_requested.emit(position)
+        "mine_explosion":
+            explosion_requested.emit(1.0)
+```
+#### Signal Connection Best Practices
+\```gdscript
+# ❌ Avoid lambda in connections - harder to disconnect
+signal_name.connect(func(): do_something())
+
+# ✅ Named method - can be disconnected if needed
+signal_name.connect(_on_signal_received)
+
+func _on_signal_received():
+    do_something()
+
+# For cleanup when scene exits
+func _exit_tree():
+    signal_name.disconnect(_on_signal_received)
+```
+### Game Development Best Practices
+
+#### Defensive Programming
+Validate input and state before processing.
+
+\```gdscript
+# ❌ Assumes valid state
+func reveal_tile(index: int):
+    tiles[index].reveal()
+
+# ✅ Validates before processing
+func reveal_tile(index: int) -> bool:
+    if not _is_valid_tile_index(index):
+        push_error("Invalid tile index: " + str(index))
+        return false
+    
+    if tiles[index].is_revealed:
+        push_warning("Tile already revealed: " + str(index))
+        return false
+    
+    tiles[index].reveal()
+    return true
+
+func _is_valid_tile_index(index: int) -> bool:
+    return index >= 0 and index < tiles.size()
+```
+#### Testing & Validation
+Built-in test patterns for validation.
+
+\```gdscript
+# ✅ Test suite pattern from GlobeSweeper
+func run_tests() -> Dictionary:
+    var results = {}
+    
+    # Geometry tests
+    results["geometry"] = test_geometry_generation()
+    
+    # State machine tests
+    results["state_machine"] = test_state_transitions()
+    
+    # Scoring tests
+    results["scoring"] = test_scoring_calculations()
+    
+    return results
+
+func test_geometry_generation() -> Dictionary:
+    var test = {"status": "PASS", "details": []}
+    
+    var generator = GlobeGenerator.new()
+    var globe = generator.generate(42)
+    
+    if globe.tiles.size() != 42:
+        test.status = "FAIL"
+        test.details.append("Tile count mismatch")
+    
+    return test
+```
+#### Cross-Platform Input Handling
+Support multiple input methods for broad accessibility.
+
+\```gdscript
+# ✅ Handle touch, mouse, and keyboard
+func _input(event):
+    if event is InputEventMouseButton:
+        if event.pressed:
+            _on_mouse_pressed(event.position, event.button_index)
+    
+    elif event is InputEventScreenTouch:
+        if event.pressed:
+            _on_touch_pressed(event.position)
+    
+    elif event is InputEventKey:
+        if event.pressed and event.keycode == KEY_SPACE:
+            _on_space_pressed()
+
+func _on_mouse_pressed(position: Vector2, button: int):
+    if button == MOUSE_BUTTON_LEFT:
+        reveal_at_position(position)
+    elif button == MOUSE_BUTTON_RIGHT:
+        flag_at_position(position)
+
+func _on_touch_pressed(position: Vector2):
+    reveal_at_position(position)
+```
+### Code Organization Best Practices
+
+#### Directory Structure by Feature
+Organize code by feature/subsystem, not by type.
+```
+scripts/
+├── main.gd                          # Game orchestrator
+├── managers/
+│   ├── game_state_manager.gd       # State machine
+│   ├── scoring_system.gd           # Score tracking
+│   ├── difficulty_scaling_manager.gd # Adaptive difficulty
+│   ├── audio_manager.gd            # Audio synthesis
+│   └── interaction_manager.gd      # Input handling
+├── generation/
+│   ├── globe_generator.gd          # Mesh generation
+│   └── mine_placement.gd           # Mine algorithm
+├── effects/
+│   ├── vfx_system.gd              # Particle effects
+│   └── sound_vfx_manager.gd       # Event coordination
+└── ui/
+    ├── ui_manager.gd              # UI orchestration
+    ├── hud_controller.gd          # In-game HUD
+    ├── main_menu_controller.gd    # Menu logic
+    └── settings_menu_controller.gd # Settings UI
+```
+**Benefits**:
+- Easy to find related code
+- Clear dependencies between subsystems
+- Easier to isolate and test features
+- Self-documenting structure
+
+#### Git Practices
+Write meaningful commit messages and keep commits focused.
+```bash
+# ❌ Poor commit messages
+git commit -m "fix stuff"
+git commit -m "wip"
+
+# ✅ Clear, descriptive messages
+git commit -m "fix: prevent mine placement near first click
+
+- Add safe_zone calculation in place_mines()
+- Validate no mines within 2-tile radius
+- Add test for first-click safety"
+
+git commit -m "refactor: extract audio synthesis to separate method
+
+- Move AudioStreamGenerator setup to _setup_audio_stream()
+- Reduces _ready() complexity
+- Improves testability"
+
+git commit -m "feat: add difficulty scaling performance tracking
+
+- Track efficiency, speed, error rate metrics
+- Adjust difficulty based on 10-game window
+- Add scaling history for rollback capability"
+```
+### Common Pitfalls & Prevention
+
+#### Pitfall 1: Circular Signal Connections
+**Problem**: System A listens to System B, which listens to System A = infinite loops.
+
+\```gdscript
+# ❌ Circular connection
+signal health_changed(value: int)
+
+func _ready():
+    health_changed.connect(_on_health_changed)
+
+func _on_health_changed(value: int):
+    health_changed.emit(value - 1)  # Emits again = infinite loop
+```
+**Solution**: Carefully track signal dependencies; prefer unidirectional flows.
+
+\```gdscript
+# ✅ Unidirectional flow
+signal health_decreased(value: int)
+
+func take_damage(amount: int):
+    health -= amount
+    if health <= 0:
+        death_requested.emit()
+    else:
+        health_decreased.emit(health)
+```
+#### Pitfall 2: Missing Type Hints
+**Problem**: No autocompletion, hard to debug type mismatches.
+
+\```gdscript
+# ❌ Missing types
+func process_tiles(tiles):
+    for tile in tiles:
+        # No autocompletion for tile methods
+
+# ✅ Clear types
+func process_tiles(tiles: Array[Tile]) -> void:
+    for tile in tiles:
+        # Autocompletion available for Tile methods
+```
+#### Pitfall 3: Not Cleaning Up Signals
+**Problem**: Memory leaks and stale signal handlers.
+
+```gdscript
+# ❌ Signal leaks memory (GlobeSweeper Anti-Pattern)
+class_name GlobeTile
+extends StaticBody3D  # Matches actual project base class
+
+func _ready():
+    GameStateManager.state_changed.connect(_on_state_changed)
+
+# ✅ Proper cleanup (GlobeSweeper Best Practice)
+func _exit_tree():
+    if GameStateManager.state_changed.is_connected(_on_state_changed):
+        GameStateManager.state_changed.disconnect(_on_state_changed)
+```
+
+#### Pitfall 4: Hardcoded Values
+**Problem**: Magic numbers reduce maintainability (especially in difficulty scaling).
+
+**GlobeSweeper Example**:
+```gdscript
+# ❌ Anti-pattern from early versions
+func adjust_difficulty():
+    if efficiency > 0.8:  # What's 0.8?
+        mine_percentage += 0.1
+
+# ✅ Current best practice (from DifficultyScalingManager.gd)
+const HIGH_EFFICIENCY_THRESHOLD = 0.8
+const MINE_SCALING_STEP = 0.1
+
+func adjust_difficulty():
+    if efficiency > HIGH_EFFICIENCY_THRESHOLD:
+        mine_percentage += MINE_SCALING_STEP
+```
+
+#### Pitfall 5: Blocking the Main Thread
+**Problem**: Long operations freeze the game.
+
+\```gdscript
+# ❌ Blocks rendering
+func generate_large_mesh():
+    for i in range(100000):
+        # Heavy computation without yielding
+
+# ✅ Yields periodically
+func generate_large_mesh():
+    for i in range(100000):
+        if i % 100 == 0:
+            await get_tree().process_frame
+        # Continue heavy computation
+```
+### Further Reading
+
+**Official Godot Documentation**:
+- [Best Practices Guide](https://docs.godotengine.org/en/stable/tutorials/best_practices/)
+- [Scene Organization](https://docs.godotengine.org/en/stable/tutorials/best_practices/scene_organization.html)
+- [GDScript Style Guide](https://docs.godotengine.org/en/stable/tutorials/scripting/gdscript/style_guide.html)
+- [Performance Best Practices](https://docs.godotengine.org/en/stable/tutorials/performance/index.html)
+- [Signals and Connections](https://docs.godotengine.org/en/stable/tutorials/best_practices/signals.html)
+
+**GlobeSweeper 3D Implementation Examples**:
+- Signal-driven architecture: [main.gd](scripts/main.gd), [audio_manager.gd](scripts/audio_manager.gd)
+- State management: [game_state_manager.gd](scripts/game_state_manager.gd)
+- Encapsulation: [powerup_manager.gd](scripts/powerup_manager.gd)
+- Testing patterns: [comprehensive_test_suite.gd](scripts/comprehensive_test_suite.gd)
+- Performance optimization: [globe_generator.gd](scripts/globe_generator.gd)
+
+---
+
+**Final Reminder**: These best practices compound over time. Small improvements in code organization, type safety, and signal discipline prevent major issues later. Invest in clarity now to save debugging time tomorrow.
+

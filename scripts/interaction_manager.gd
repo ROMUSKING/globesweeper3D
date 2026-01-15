@@ -179,15 +179,16 @@ func _perform_raycast(screen_pos: Vector2) -> Dictionary:
 	var camera = get_viewport().get_camera_3d()
 	if not camera:
 		return {}
-		
+
 	var from = camera.project_ray_origin(screen_pos)
-	var to = from + camera.project_ray_normal(screen_pos) * 1000.0
-	
+	var globe_radius = get_parent().globe_radius
+	var to = from + camera.project_ray_normal(screen_pos) * (globe_radius * 2.0)
+
 	var space_state = get_world_3d().direct_space_state
 	var query = PhysicsRayQueryParameters3D.create(from, to)
 	# Ensure we collide with the tile layer (layer 1 was set in generator)
 	query.collision_mask = 1
-	
+
 	return space_state.intersect_ray(query)
 
 func _get_tile_index_at(screen_pos: Vector2) -> int:
