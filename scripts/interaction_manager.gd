@@ -71,6 +71,7 @@ func _update_hover():
 func _input(event: InputEvent) -> void:
 	# Check if we can process input based on game state
 	if game_state_manager and not game_state_manager.can_interact():
+		_log_input_rejection("Game state prevents interaction", {"current_state": game_state_manager.current_state})
 		return
 	
 	# Handle powerup activation keys
@@ -85,6 +86,15 @@ func _input(event: InputEvent) -> void:
 		_handle_touch(event)
 	elif event is InputEventScreenDrag:
 		_handle_touch_drag(event)
+
+func _log_input_rejection(reason: String, context: Dictionary = {}):
+	"""Log detailed information about rejected input events"""
+	var log_data = {
+		"reason": reason,
+		"context": context,
+		"timestamp": Time.get_unix_time_from_system()
+	}
+	print("[INPUT REJECTED] %s: %s" % [reason, str(log_data)])
 
 func _handle_mouse_button(event: InputEventMouseButton) -> void:
 	if event.pressed:

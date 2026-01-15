@@ -628,17 +628,29 @@ func _ready():
 **Definition**: Each script should have one reason to change.
 
 \```gdscript
-# ❌ Violates SRP - handles too many responsibilities
-class_name GameManager
+# ❌ Violates SRP - monolithic main class handling too many concerns
+class_name Main
 extends Node
 
 func _process(delta):
-    update_score()  # Scoring logic
-    update_physics()  # Physics logic
-    update_audio()  # Audio logic
-    update_ui()  # UI logic
+    _update_game_state()  # State management
+    _process_input()      # Input handling
+    _update_difficulty()  # Difficulty scaling
+    _calculate_score()    # Scoring logic
+    _update_ui()          # UI updates
 
-# ✅ Follows SRP - each system has one job
+# ✅ Follows SRP - GlobeSweeper's decomposed manager pattern
+class_name GameStateManager
+extends Node
+signal state_changed(from_state: GameState, to_state: GameState)
+
+func change_state(new_state: GameState, reason: String = "") -> bool:
+    if not _is_valid_transition(current_state, new_state):
+        return false
+    # Handle only state logic, nothing else
+    emit_signal("state_changed", current_state, new_state)
+    return true
+
 class_name ScoringSystem
 extends Node
 signal score_changed(new_score: int)
@@ -647,6 +659,7 @@ func add_points(amount: int):
     score += amount
     score_changed.emit(score)
 ```
+**GlobeSweeper Implementation**: Main orchestrates while specialized managers handle individual concerns (GameStateManager, ScoringSystem, AudioManager, DifficultyScalingManager, etc.)
 **Benefits**:
 - Easier to understand and maintain
 - Simpler to test and debug
@@ -657,27 +670,38 @@ func add_points(amount: int):
 **Principle**: Hide internal implementation details; expose only necessary interfaces.
 
 \```gdscript
-# ❌ Exposes internal state - allow external modification
-class_name Player
-extends Node3D
+# ❌ Exposes internal state - allows invalid tile states
+class_name GlobeTile
+extends StaticBody3D
 
-var health: int = 100  # Anyone can modify this directly
+var state: int = 0  # Anyone can modify this directly
 
-# ✅ Protects internal state with accessors
-class_name Player
-extends Node3D
+# ✅ Protects tile state with validated accessors
+class_name GlobeTile
+extends StaticBody3D
 
-var health: int = 100
-signal health_changed(new_health: int)
+var state: int = 0  # 0=hidden, 1=revealed, 2=flagged, 3=mine
+signal state_changed(new_state: int)
 
-func take_damage(amount: int):
-    health = max(0, health - amount)
-    health_changed.emit(health)
+func reveal(has_mine: bool = false):
+    if state != 0:
+        return false  # Can't reveal already-revealed tile
+    state = 3 if has_mine else 1
+    state_changed.emit(state)
+    return true
 
-func heal(amount: int):
-    health = min(100, health + amount)
-    health_changed.emit(health)
+func toggle_flag() -> bool:
+    if state == 0:
+        state = 2  # Flag hidden tile
+        state_changed.emit(state)
+        return true
+    elif state == 2:
+        state = 0  # Unflag
+        state_changed.emit(state)
+        return true
+    return false  # Can't flag revealed tiles
 ```
+**Benefits**: Prevents invalid state transitions (e.g., revealing already-revealed tiles), centralizes state validation logic, maintains audit trail via signals.
 **Benefits**:
 - Prevents invalid state
 - Allows validation before state changes
@@ -835,41 +859,42 @@ enum ScalingMode {
 ### Performance Best Practices
 
 #### Caching & Lookups
-Cache computed values instead of recalculating every frame.
+Cache computed values instead of recalculating every frame. GlobeSweeper reuses mesh instances for performance.
 
 \```gdscript
-# ❌ Inefficient - recalculates every frame
+# ❌ Inefficient - regenerates mesh every frame
 extends Node
 
 var tiles: Array[Tile]
 
 func _process(_delta):
-    var hex_tiles = tiles.filter(func(t): return t.is_hex)
-    # ... do something with hex_tiles
+    var hex_tiles = tiles.filter(func(t): return t.shape == "hex")
+    # Process hex tiles every frame (wasteful)
 
-# ✅ Efficient - cache the filtered result
+# ✅ Efficient - cache mesh references and only update when needed
 extends Node
 
 var tiles: Array[Tile]
-var _hex_tiles_cache: Array[Tile] = []
-var _cache_dirty: bool = true
+var _hex_mesh_instances: Array[Tile] = []
+var _needs_mesh_rebuild: bool = true
 
 func _ready():
     for tile in tiles:
-        tile.state_changed.connect(_on_tile_state_changed)
+        tile.mesh_changed.connect(_on_tile_mesh_changed)
 
-func _on_tile_state_changed():
-    _cache_dirty = true
+func _on_tile_mesh_changed():
+    _needs_mesh_rebuild = true
 
 func _process(_delta):
-    if _cache_dirty:
-        _hex_tiles_cache = tiles.filter(func(t): return t.is_hex)
-        _cache_dirty = false
+    if _needs_mesh_rebuild:
+        _hex_mesh_instances = tiles.filter(func(t): return t.shape == "hex")
+        _needs_mesh_rebuild = false
     
-    # Use cached result
-    for tile in _hex_tiles_cache:
-        process_tile(tile)
+    # Use cached mesh list for rendering
+    for tile in _hex_mesh_instances:
+        update_tile_visual(tile)
 ```
+**GlobeSweeper Pattern**: Shared mesh caching in GlobeGenerator prevents redundant geometry generation. Tile state changes only mark cache as dirty rather than recalculating.
 #### Efficient Loops & Filtering
 Write loops that terminate early and avoid unnecessary iterations.
 

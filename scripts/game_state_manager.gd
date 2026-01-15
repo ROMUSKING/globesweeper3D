@@ -85,7 +85,12 @@ func change_state(new_state: GameState, reason: String = "") -> bool:
 	# Validate transition
 	if not _is_valid_transition(current_state, new_state):
 		var error_msg = "Invalid transition from %s to %s" % [get_state_name(current_state), get_state_name(new_state)]
-		_log_error(error_msg)
+		var context = {
+			"current_state": current_state,
+			"target_state": new_state,
+			"valid_transitions": valid_transitions.get(current_state, [])
+		}
+		_log_error(error_msg, "", context)
 		emit_signal("state_transition_attempted", current_state, new_state, false, error_msg)
 		return false
 	
@@ -379,9 +384,21 @@ func _log_state_change(from_state: GameState, to_state: GameState, reason: Strin
 			message += " (%s)" % reason
 		print(message)
 
-func _log_error(message: String):
-	"""Log error messages"""
-	print("ERROR: GameStateManager - %s" % message)
+func _log_error(message: String, stack_trace: String = "", context: Dictionary = {}):
+	"""Log error messages with detailed context for debugging"""
+	var error_message = "ERROR: GameStateManager - %s" % message
+	if stack_trace != "":
+		error_message += "\nStack Trace: %s" % stack_trace
+	if not context.is_empty():
+		error_message += "\nContext: %s" % str(context)
+	print(error_message)
+
+func _log_debug_info(info_type: String, data: Variant):
+	"""Log detailed debug information for complex scenarios"""
+	if debug_logging_enabled:
+		var timestamp = Time.get_unix_time_from_system()
+		var log_message = "[DEBUG] [%s] %s: %s" % [timestamp, info_type, str(data)]
+		print(log_message)
 
 func _play_state_transition_sound(sound_type: String):
 	"""Play audio feedback for state transitions"""
@@ -400,6 +417,18 @@ func _play_state_transition_sound(sound_type: String):
 				if player.name == "Click" or player.name == "UI":
 					player.play()
 					break
+
+func _exit_tree():
+	"""Clean up resources and signals when the node is removed from the scene tree"""
+	# Clear references to prevent memory leaks
+	_audio_manager = null
+	state_data.clear()
+	paused_game_data.clear()
+	state_history.clear()
+	state_entry_times.clear()
+	valid_transitions.clear()
+	
+	_log_debug_info("Cleanup", {"message": "GameStateManager resources cleaned up"})
 
 ## Sets the AudioManager reference for dependency injection.
 ## Call this from main.gd after AudioManager is ready to remove scene tree coupling.
